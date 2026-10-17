@@ -1,10 +1,29 @@
+# Local stack: React (nginx) on http://localhost:3000, FastAPI on http://localhost:8080/docs
+#   docker compose up --build
+#   docker compose run --rm backend python ingest_sample_kb.py --domain hr
+
 services:
-  copilot:
+  backend:
     build: .
     env_file: .env
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/app/data
-      - ./uploads:/app/uploads
+      - backend-data:/app/data      # SQLite: memory, conversations, audit, documents
+      - backend-uploads:/app/uploads
     restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    environment:
+      API_UPSTREAM: http://backend:8080
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend-data:
+  backend-uploads:

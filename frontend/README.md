@@ -1,32 +1,25 @@
-# React + TypeScript + Vite
+# Enterprise Copilot — Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React 19 + TypeScript single-page app for the Agentic RAG backend in `../app`. See the [main README](../README.md) for the full project.
 
-Currently, two official plugins are available:
+## Scripts
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Dev server on http://localhost:5173, `/api` proxied to the backend |
+| `npm run build` | Type-check and build to `dist/` |
+| `npm test` | Vitest + Testing Library, API mocked with MSW |
+| `npm run typecheck` | TypeScript only |
+| `npm run lint` | oxlint |
 
-## React Compiler
+Copy `.env.example` to `.env` to point the dev proxy at another backend (`API_PROXY_TARGET`).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## How it fits together
 
-## Expanding the Oxlint configuration
+- **`api/`**: axios client with error normalisation, Zod schemas for every response, and `streamChat()`, which reads the Server-Sent Events of `/api/chat/{domain}/stream` with `fetch`.
+- **`hooks/`**: TanStack Query hooks for conversations, history and documents. `useChat` merges a conversation's stored history with live streamed steps.
+- **`routes/`**: the URL is the source of truth for the domain and the conversation (`/:domain/c/:threadId`).
+- **`stores/`**: Zustand for UI preferences (theme, mobile drawers). Only the theme is persisted.
+- **`components/ui/`**: shadcn/ui components (Base UI). The domain accent colour is the `--domain` CSS variable.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Domains, their labels, examples and colour come from `GET /api/domains`, so adding a backend domain adds a tab without frontend changes.

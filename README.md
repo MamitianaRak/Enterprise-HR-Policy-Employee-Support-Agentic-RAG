@@ -1,6 +1,6 @@
 # Enterprise HR Policy & Employee Support Agentic RAG Copilot
 
-An end-to-end Forward Deployed Engineer (FDE) project that converts an Agentic RAG workflow into a deployable internal HR product using LangGraph, FastAPI, Pinecone, Google Gemini, Tavily, HTML, CSS, and JavaScript.
+An end-to-end Forward Deployed Engineer (FDE) project that converts an Agentic RAG workflow into a deployable internal HR product: a **LangGraph + FastAPI** backend (Pinecone, Google Gemini, Tavily) and a **React + TypeScript** frontend that streams the agent's reasoning live, packaged with **Docker**.
 
 ## 1. Business Problem
 
@@ -69,11 +69,11 @@ Observe + Improve
 ```text
 Employee / HR User
         ↓
-HTML/CSS/JavaScript Web UI
-        ↓ POST /api/chat
+React + TypeScript Web UI
+        ↓ POST /api/chat/{domain}/stream   (Server-Sent Events: one event per agent step)
 FastAPI
         ↓
-LangGraph Agentic RAG Controller
+LangGraph Agentic RAG Controller  ←→  SQLite (conversation memory, audit)
         ↓
  ┌───────────────┬─────────────────┐
  ↓               ↓
@@ -137,10 +137,15 @@ Generate from KB   [4] Tavily Web Search
 | Embeddings | Gemini `gemini-embedding-2-preview` | Vector embeddings |
 | Vector DB | Pinecone | Private enterprise HR knowledge base |
 | External search | Tavily | Fallback when company HR KB is insufficient |
-| API | FastAPI | Backend and REST endpoints |
-| Frontend | HTML/CSS/JavaScript | Employee-facing interface |
-| Audit | SQLite | Decision-path logging |
-| Packaging | Docker | Reproducible deployment |
+| API | FastAPI | REST endpoints + Server-Sent Events streaming |
+| Memory & audit | SQLite + LangGraph `SqliteSaver` | Conversation memory, decision-path logging |
+| Frontend | React 19 + TypeScript + Vite | Employee-facing single-page app |
+| UI | Tailwind CSS + shadcn/ui (Base UI) | Accessible components, light/dark theme |
+| Server state | TanStack Query + axios | Caching, invalidation, typed API client |
+| Client state & routing | Zustand + React Router | Preferences; one URL per conversation |
+| Validation | Zod | Runtime validation of every API response |
+| Testing | Pytest · Vitest + Testing Library + MSW | Backend and frontend tests without network calls |
+| Packaging | Docker + docker compose (nginx for the frontend) | Reproducible deployment |
 
 ## 6. Project Structure
 
@@ -148,37 +153,47 @@ Each business domain has its **own LangGraph workflow** and its **own Pinecone n
 
 ```text
 Enterprise-HR-Policy-Agentic-RAG-Copilot/
-├── app/
+├── app/                         Backend (FastAPI, API only)
 │   ├── api/
-│   │   ├── chat.py          POST /api/chat/{domain}
-│   │   ├── ingest.py        POST /api/ingest/{domain}
-│   │   └── health.py        GET /api/health, GET /api/domains
+│   │   ├── chat.py              POST /api/chat/{domain} and /stream (SSE)
+│   │   ├── sessions.py          Conversation list and history
+│   │   ├── ingest.py            Document upload, list, delete
+│   │   ├── health.py            GET /api/health, GET /api/domains
+│   │   └── errors.py            Provider failures → actionable 503/504 messages
 │   ├── core/
-│   │   ├── config.py        Settings loaded from .env
-│   │   ├── llm.py           Gemini chat model + text helper
+│   │   ├── config.py            Settings loaded from .env
+│   │   ├── llm.py               Gemini chat model (timeout, retries) + text helper
 │   │   └── logging.py
 │   ├── rag/
-│   │   ├── common/          Shared building blocks
-│   │   │   ├── nodes.py     Reusable node factories + edge conditions
-│   │   │   ├── state.py     Agent state and structured outputs
-│   │   │   └── vectorstore.py  Pinecone access per namespace
-│   │   ├── hr/              HR workflow
+│   │   ├── common/              Shared building blocks
+│   │   │   ├── nodes.py         Reusable node factories + edge conditions
+│   │   │   ├── state.py         Agent state and structured outputs
+│   │   │   ├── memory.py        SQLite checkpointer per conversation
+│   │   │   └── vectorstore.py   Pinecone access per namespace
+│   │   ├── hr/                  HR workflow
 │   │   │   ├── graph.py
-│   │   │   └── prompts.py
-│   │   └── registry.py      domain → workflow + namespace
-│   ├── services/
-│   │   ├── audit.py         SQLite decision log (per domain)
-│   │   └── ingestion.py     Load, chunk, tag and index documents
+│   │   │   ├── prompts.py
+│   │   │   └── ui.py            Labels, examples and colour shown by the frontend
+│   │   └── registry.py          domain → workflow + namespace + UI settings
+│   ├── services/                audit, conversations, documents, ingestion (SQLite + Pinecone)
 │   └── main.py
+├── frontend/                    React + TypeScript single-page app
+│   ├── src/
+│   │   ├── api/                 axios client, Zod schemas, SSE streaming
+│   │   ├── hooks/               TanStack Query hooks, useChat (live stream)
+│   │   ├── stores/              Zustand (theme, drawers)
+│   │   ├── routes/              /:domain and /:domain/c/:threadId
+│   │   ├── components/          chat, layout, documents, ui (shadcn/ui)
+│   │   └── test/                MSW handlers and test setup
+│   ├── Dockerfile               Node build → nginx
+│   └── nginx.conf.template      Static files + /api reverse proxy (SSE-friendly)
 ├── data/documents/
-│   ├── hr/                  Sample HR knowledge base
-│   └── cloudops/            (coming next)
-├── static/  templates/      Web UI
-├── tests/                   Pytest suite (no network calls)
-├── uploads/
+│   ├── hr/                      Sample HR knowledge base
+│   └── cloudops/                (coming next)
+├── tests/                       Pytest suite (no network calls)
+├── Dockerfile                   Backend image
+├── docker-compose.yml           Backend + frontend
 ├── .env.example
-├── docker-compose.yml
-├── Dockerfile
 ├── ingest_sample_kb.py
 ├── requirements.txt / requirements-dev.txt
 └── run.py
@@ -187,8 +202,8 @@ Enterprise-HR-Policy-Agentic-RAG-Copilot/
 ### Adding a new domain
 
 1. Add documents to `data/documents/<domain>/`.
-2. Create `app/rag/<domain>/prompts.py` and `graph.py`, reusing the nodes in `app/rag/common/nodes.py`.
-3. Register it in `app/rag/registry.py` with its own namespace.
+2. Create `app/rag/<domain>/prompts.py`, `graph.py` and `ui.py`, reusing the nodes in `app/rag/common/nodes.py`.
+3. Register it in `app/rag/registry.py` with its own namespace. The frontend picks it up automatically (new tab).
 4. Run `python ingest_sample_kb.py --domain <domain>`.
 
 ## 7. Setup
@@ -242,36 +257,61 @@ APP_ENV=development
 python ingest_sample_kb.py --domain hr
 ```
 
-### Step 5 — Run the application
+### Step 5 — Run the application (two terminals)
+
+Backend (API on port 8080, docs at `http://127.0.0.1:8080/docs`):
 
 ```bash
 python run.py
 ```
 
-Open `http://127.0.0.1:8080` and FastAPI docs at `http://127.0.0.1:8080/docs`.
-
-Or with Docker:
+Frontend (requires Node.js 20+):
 
 ```bash
-docker compose up --build
+cd frontend
+npm install
+npm run dev
 ```
+
+Open `http://localhost:5173`. The Vite dev server forwards `/api` to the backend; set `API_PROXY_TARGET` in `frontend/.env` if the backend runs elsewhere (see `frontend/.env.example`).
 
 ### Step 6 — Run the tests
 
 ```bash
 pip install -r requirements-dev.txt
-pytest
+pytest                      # backend: fake LLM, retriever and web search, no API keys needed
+
+cd frontend
+npm test                    # frontend: Vitest + Testing Library, API mocked with MSW
+npm run typecheck
 ```
 
-The tests use a fake LLM, retriever and web search, so they need no API keys.
+## Docker (deployment)
+
+Two images, one per service:
+
+| Image | Dockerfile | Contents |
+|---|---|---|
+| Backend | `Dockerfile` | FastAPI + LangGraph, non-root user, health check on `/api/health`, listens on `$PORT` (8080) |
+| Frontend | `frontend/Dockerfile` | Multi-stage: Node builds the app, nginx serves it and proxies `/api` to `$API_UPSTREAM` with buffering off for streaming |
+
+```bash
+docker compose up --build
+# → app on http://localhost:3000, API docs on http://localhost:8080/docs
+
+docker compose run --rm backend python ingest_sample_kb.py --domain hr   # index the sample documents
+```
+
+SQLite data lives in the `backend-data` volume. Both images honour the `PORT` variable, so they can also run as separate web services on a container host such as Render.
 
 ## API
 
 | Method | Route | Description |
 |---|---|---|
 | GET | `/api/health` | Service status |
-| GET | `/api/domains` | Available domains |
+| GET | `/api/domains` | Available domains and their UI settings |
 | POST | `/api/chat/{domain}` | Ask a question (`{"question": "...", "thread_id": "..."}`) |
+| POST | `/api/chat/{domain}/stream` | Same, as Server-Sent Events: `start`, one `step` per trace line, then `result` or `error` |
 | GET | `/api/sessions/{domain}` | Previous conversations of a domain (title, turns, last update) |
 | GET | `/api/sessions/{domain}/{thread_id}` | Conversation history |
 | DELETE | `/api/sessions/{domain}/{thread_id}` | Forget a conversation |
@@ -283,7 +323,7 @@ The tests use a fake LLM, retriever and web search, so they need no API keys.
 
 ## Conversation Memory
 
-Each conversation has a `thread_id` (kept in the browser; generated by the API if omitted). LangGraph's SQLite checkpointer stores the conversation in `data/memory.db`, and a `contextualize` node rewrites follow-ups such as *"And for sick leave?"* into standalone questions before retrieval. `MEMORY_TURNS` controls how many previous turns are used.
+Each conversation has a `thread_id`, visible in the URL (`/hr/c/<thread_id>`) and generated by the API if omitted. LangGraph's SQLite checkpointer stores the conversation in `data/memory.db`, and a `contextualize` node rewrites follow-ups such as *"And for sick leave?"* into standalone questions before retrieval. `MEMORY_TURNS` controls how many previous turns are used.
 
 ## Credits
 

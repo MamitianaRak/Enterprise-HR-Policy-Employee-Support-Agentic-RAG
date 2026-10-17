@@ -1,7 +1,17 @@
+# The backend image only needs app/, data/documents/, requirements.txt and ingest_sample_kb.py.
+# Everything else stays out of the build context.
+
+# Secrets and local config
 .env
+.env.*
+
+# VCS and editors
 .git
 .gitignore
 .vscode
+.idea
+
+# Python caches and environments
 __pycache__
 *.pyc
 *.pyo
@@ -10,6 +20,16 @@ venv
 .venv
 env
 .pytest_cache
-tests
-*.logdata/*.db
+
+# Local runtime data
+data/*.db
+data/*.db-*
 uploads
+
+# Not needed in the backend image
+frontend
+tests
+docs
+*.log
+*.md
+!data/documents/**/*.md
