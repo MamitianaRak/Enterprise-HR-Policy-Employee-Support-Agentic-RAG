@@ -11,4 +11,5 @@ venv
 env
 .pytest_cache
 tests
-*.log
+*.logdata/*.db
+uploads

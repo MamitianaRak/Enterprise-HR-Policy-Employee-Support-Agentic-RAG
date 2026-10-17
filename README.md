@@ -136,32 +136,52 @@ Generate from KB   [4] Tavily Web Search
 
 ## 6. Project Structure
 
+Each business domain has its **own LangGraph workflow** and its **own Pinecone namespace**, built from shared, reusable nodes.
+
 ```text
 Enterprise-HR-Policy-Agentic-RAG-Copilot/
 ├── app/
-│   ├── api/routes.py
-│   ├── core/config.py
-│   ├── core/logging.py
-│   ├── rag/state.py
-│   ├── rag/vectorstore.py
-│   ├── rag/workflow.py
-│   ├── services/audit.py
-│   ├── services/ingestion.py
+│   ├── api/
+│   │   ├── chat.py          POST /api/chat/{domain}
+│   │   ├── ingest.py        POST /api/ingest/{domain}
+│   │   └── health.py        GET /api/health, GET /api/domains
+│   ├── core/
+│   │   ├── config.py        Settings loaded from .env
+│   │   ├── llm.py           Gemini chat model + text helper
+│   │   └── logging.py
+│   ├── rag/
+│   │   ├── common/          Shared building blocks
+│   │   │   ├── nodes.py     Reusable node factories + edge conditions
+│   │   │   ├── state.py     Agent state and structured outputs
+│   │   │   └── vectorstore.py  Pinecone access per namespace
+│   │   ├── hr/              HR workflow
+│   │   │   ├── graph.py
+│   │   │   └── prompts.py
+│   │   └── registry.py      domain → workflow + namespace
+│   ├── services/
+│   │   ├── audit.py         SQLite decision log (per domain)
+│   │   └── ingestion.py     Load, chunk, tag and index documents
 │   └── main.py
-├── data/sample_kb/
-│   ├── company_hr_handbook.md
-│   └── hr_operations_runbook.md
-├── static/
-│   ├── css/style.css
-│   └── js/app.js
-├── templates/index.html
+├── data/documents/
+│   ├── hr/                  Sample HR knowledge base
+│   └── cloudops/            (coming next)
+├── static/  templates/      Web UI
+├── tests/                   Pytest suite (no network calls)
 ├── uploads/
+├── .env.example
+├── docker-compose.yml
 ├── Dockerfile
 ├── ingest_sample_kb.py
-├── requirements.txt
-├── run.py
-└── README.md
+├── requirements.txt / requirements-dev.txt
+└── run.py
 ```
+
+### Adding a new domain
+
+1. Add documents to `data/documents/<domain>/`.
+2. Create `app/rag/<domain>/prompts.py` and `graph.py`, reusing the nodes in `app/rag/common/nodes.py`.
+3. Register it in `app/rag/registry.py` with its own namespace.
+4. Run `python ingest_sample_kb.py --domain <domain>`.
 
 ## 7. Setup
 
@@ -191,24 +211,27 @@ pip install -r requirements.txt
 
 ### Step 3 — Configure environment
 
-Create a `.env` file at the project root and add your keys.
+Copy `.env.example` to `.env` and add your keys.
 
 ```env
 GOOGLE_API_KEY=your_google_api_key_here
 TAVILY_API_KEY=your_tavily_api_key_here
 PINECONE_API_KEY=your_pinecone_api_key_here
 PINECONE_INDEX_NAME=fde-hr-policy-rag
-PINECONE_NAMESPACE=company-hr-kb
+HR_NAMESPACE=company-hr-kb
 GEMINI_MODEL=gemini-3.5-flash-lite
 EMBEDDING_MODEL=gemini-embedding-2-preview
+EMBEDDING_DIMENSION=768
 ADMIN_API_KEY=change-me-in-production
 APP_ENV=development
 ```
 
+`PINECONE_NAMESPACE` is still accepted as an alias for `HR_NAMESPACE`. `EMBEDDING_DIMENSION` must match the existing Pinecone index: on a mismatch the app stops with an error instead of deleting the index.
+
 ### Step 4 — Load sample HR knowledge
 
 ```bash
-python ingest_sample_kb.py
+python ingest_sample_kb.py --domain hr
 ```
 
 ### Step 5 — Run the application
@@ -218,6 +241,32 @@ python run.py
 ```
 
 Open `http://127.0.0.1:8080` and FastAPI docs at `http://127.0.0.1:8080/docs`.
+
+Or with Docker:
+
+```bash
+docker compose up --build
+```
+
+### Step 6 — Run the tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The tests use a fake LLM, retriever and web search, so they need no API keys.
+
+## API
+
+| Method | Route | Description |
+|---|---|---|
+| GET | `/api/health` | Service status |
+| GET | `/api/domains` | Available domains |
+| POST | `/api/chat/{domain}` | Ask a question (`{"question": "..."}`) |
+| POST | `/api/ingest/{domain}` | Upload a document (header `X-Admin-Key`) |
+
+`POST /api/chat` and `POST /api/ingest` remain as aliases for the `hr` domain.
 
 ## 8. Classroom Demo Scenarios
 
