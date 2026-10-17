@@ -77,6 +77,26 @@ describe('ChatPage', () => {
     expect(screen.getAllByText('checkout-api').length).toBeGreaterThan(0)
   })
 
+  it('shows the IT ticket priority', async () => {
+    const it_ = { ...HR_DOMAIN, name: 'it', label: 'IT Support', title: 'IT Support Copilot', accent: '#7c3aed' }
+    server.use(
+      http.get('*/api/domains', () => HttpResponse.json({ default: 'hr', domains: [HR_DOMAIN, it_] })),
+      http.get('*/api/sessions/it', () => HttpResponse.json({ sessions: [] })),
+      http.post('*/api/chat/it/stream', () =>
+        new HttpResponse(
+          sse([['result', { ...CHAT_RESULT, domain: 'it', triage: { severity: 'P1', service: 'Outlook', category: 'security' } }]]),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        ),
+      ),
+    )
+    const user = userEvent.setup()
+    renderAt('/it')
+    await user.type(await screen.findByRole('textbox', { name: 'Your question' }), 'I clicked a phishing link{Enter}')
+    const badges = await screen.findAllByText('P1')
+    expect(badges[0].closest('span')).toHaveAttribute('title', 'Estimated ticket priority')
+    expect(screen.getAllByText('Outlook').length).toBeGreaterThan(0)
+  })
+
   it('shows a readable error when the agent fails', async () => {
     server.use(
       http.post('*/api/chat/hr/stream', () =>

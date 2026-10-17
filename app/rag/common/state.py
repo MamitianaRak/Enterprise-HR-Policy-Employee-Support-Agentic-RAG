@@ -32,9 +32,10 @@ class RelevantDocuments(BaseModel):
 
 
 class Triage(BaseModel):
-    """Routing decision plus a first incident assessment, produced in a single call."""
+    """Routing decision plus a first assessment, produced in a single call.
+    severity: incident severity SEV1-SEV4 (CloudOps) or ticket priority P1-P4 (IT Support)."""
     route: Literal["kb", "direct"]
-    severity: Literal["SEV1", "SEV2", "SEV3", "SEV4", "none"] = "none"
+    severity: Literal["SEV1", "SEV2", "SEV3", "SEV4", "P1", "P2", "P3", "P4", "none"] = "none"
     service: str = ""
     category: str = ""
 

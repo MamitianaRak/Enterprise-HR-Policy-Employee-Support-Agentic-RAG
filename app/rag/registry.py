@@ -8,6 +8,8 @@ from app.rag.common.memory import get_checkpointer, thread_config
 from app.rag.common.state import initial_state
 from app.rag.hr.graph import build_graph as build_hr_graph
 from app.rag.hr.ui import UI as HR_UI
+from app.rag.it.graph import build_graph as build_it_graph
+from app.rag.it.ui import UI as IT_UI
 
 settings = get_settings()
 
@@ -30,6 +32,7 @@ class Domain:
 
 DOMAINS: dict[str, Domain] = {
     "hr": Domain("hr", settings.hr_namespace, build_hr_graph(get_checkpointer()), HR_UI),
+    "it": Domain("it", settings.it_namespace, build_it_graph(get_checkpointer()), IT_UI),
     "cloudops": Domain("cloudops", settings.cloudops_namespace, build_cloudops_graph(get_checkpointer()), CLOUDOPS_UI),
 }
 

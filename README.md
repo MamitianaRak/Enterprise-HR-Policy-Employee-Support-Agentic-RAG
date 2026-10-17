@@ -7,6 +7,7 @@
 A multi-domain **Agentic RAG** copilot for the enterprise, with one LangGraph workflow per domain:
 
 - **HR Policy & Employee Support**: answers from the company HR knowledge base, with web fallback clearly labelled for HR validation.
+- **IT Support**: assigns a ticket priority (P1-P4), answers from the IT handbook and service desk runbooks first, and never asks for passwords or MFA codes.
 - **CloudOps Incident Response**: triages incidents (severity, service, category) and answers from private runbooks, SOPs and postmortems first.
 
 An end-to-end Forward Deployed Engineer (FDE) project: a **LangGraph + FastAPI** backend (Pinecone, Google Gemini, Tavily) with self-checked, cited answers and conversation memory, and a **React + TypeScript** frontend that streams the agent's reasoning live. Tested in CI, packaged with **Docker**, deployed on **Render**.
@@ -163,6 +164,17 @@ Question / follow-up
 
 The triage badges (severity, service, category) are shown with each answer. The sample knowledge base (`data/documents/cloudops/`) contains runbooks for checkout 502 errors and payments high CPU, a rollback SOP, an incident severity and escalation policy, and a postmortem.
 
+### IT Support workflow (third domain)
+
+Same graded-retrieval graph as CloudOps (shared builder in `app/rag/common/graphs.py`), with IT-specific prompts:
+
+- **Triage** assigns the service-desk **ticket priority P1-P4**, the affected system (VPN, Outlook, laptop…) and a category.
+- **Security rules enforced in every answer prompt** (generation, revision, direct replies): never ask for passwords or MFA codes, never suggest disabling security controls, software only from the company portal, report lost devices and phishing immediately.
+- **Answer format**: self-service steps first, then when to contact the IT Service Desk and what to put in the ticket.
+- **Web fallback** targets vendor documentation and status pages, labelled as external information that IT must validate.
+
+Sample knowledge base (`data/documents/it/`): IT handbook (VPN, passwords, MFA, software, lost laptop), service desk runbook (email, laptop performance, ticket priorities), phishing and security incident reporting, office Wi-Fi and printer troubleshooting.
+
 ## 5. Technology Stack
 
 | Layer | Technology | Purpose |
@@ -202,6 +214,7 @@ enterprise-agentic-rag-copilot/
 │   ├── rag/
 │   │   ├── common/              Shared building blocks
 │   │   │   ├── nodes.py         Reusable node factories + edge conditions
+│   │   │   ├── graphs.py        Graded-retrieval graph shared by IT and CloudOps
 │   │   │   ├── state.py         Agent state and structured outputs
 │   │   │   ├── memory.py        SQLite checkpointer per conversation
 │   │   │   └── vectorstore.py   Pinecone access per namespace
@@ -209,6 +222,7 @@ enterprise-agentic-rag-copilot/
 │   │   │   ├── graph.py
 │   │   │   ├── prompts.py
 │   │   │   └── ui.py            Labels, examples and colour shown by the frontend
+│   │   ├── it/                  IT Support workflow (same layout)
 │   │   ├── cloudops/            CloudOps incident-response workflow (same layout)
 │   │   └── registry.py          domain → workflow + namespace + UI settings
 │   ├── services/                audit, conversations, documents, ingestion (SQLite + Pinecone)
@@ -225,6 +239,7 @@ enterprise-agentic-rag-copilot/
 │   └── nginx.conf.template      Static files + /api reverse proxy (SSE-friendly)
 ├── data/documents/
 │   ├── hr/                      Sample HR knowledge base
+│   ├── it/                      Sample IT handbook, service desk runbook, phishing, Wi-Fi/printers
 │   └── cloudops/                Sample runbooks, SOP, severity policy, postmortem
 ├── tests/                       Pytest suite (no network calls)
 ├── Dockerfile                   Backend image
@@ -291,10 +306,11 @@ APP_ENV=development
 
 ```bash
 python ingest_sample_kb.py --domain hr
+python ingest_sample_kb.py --domain it
 python ingest_sample_kb.py --domain cloudops
 ```
 
-Each domain is indexed into its own Pinecone namespace (`HR_NAMESPACE`, `CLOUDOPS_NAMESPACE`) in the same index.
+Each domain is indexed into its own Pinecone namespace (`HR_NAMESPACE`, `IT_NAMESPACE`, `CLOUDOPS_NAMESPACE`) in the same index.
 
 ### Step 5 — Run the application (two terminals)
 
@@ -434,6 +450,16 @@ Web Answer
 Ask an ambiguous HR question such as: **What happens if mine is wrong?**
 
 If neither private nor web evidence is sufficient, the workflow can rewrite the query, retry the KB, and eventually stop with insufficient evidence rather than hallucinating.
+
+### IT Support demos
+
+| Ask | Expected path |
+|---|---|
+| *How do I connect to the company VPN?* | Triage → P4 · VPN → IT handbook → self-service steps, then when to open a ticket |
+| Then: *It still fails after trying another gateway.* | Memory keeps the VPN context; answer moves to escalation |
+| *I think I clicked a phishing link. What should I do?* | Triage → P1 · security → phishing procedure (disconnect, change password, call the hotline) |
+| *Can I give you my password so you can fix my account?* | The assistant refuses to take credentials (security rules) |
+| *What is the latest Microsoft Teams outage guidance?* | No internal document → web search → answer labelled as external vendor information |
 
 ### CloudOps demos
 

@@ -40,6 +40,9 @@ def test_domains_expose_ui_config():
     assert hr["examples"] and hr["placeholder"] and hr["accent"].startswith("#")
     cloudops = next(d for d in data["domains"] if d["name"] == "cloudops")
     assert cloudops["label"] == "CloudOps" and cloudops["examples"]
+    it = next(d for d in data["domains"] if d["name"] == "it")
+    assert it["label"] == "IT Support" and it["examples"]
+    assert [d["name"] for d in data["domains"]] == ["hr", "it", "cloudops"]
 
 
 def test_cloudops_chat_returns_triage(monkeypatch):

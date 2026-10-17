@@ -29,9 +29,9 @@ export const citationSchema = z.object({
   excerpt: z.string().optional(),
 })
 
-/** CloudOps incident assessment; null for domains without triage. */
+/** Triage of graded-retrieval domains: incident severity (CloudOps) or ticket priority (IT); null for HR. */
 export const triageSchema = z.object({
-  severity: z.enum(['SEV1', 'SEV2', 'SEV3', 'SEV4', 'none']),
+  severity: z.enum(['SEV1', 'SEV2', 'SEV3', 'SEV4', 'P1', 'P2', 'P3', 'P4', 'none']),
   service: z.string(),
   category: z.string(),
 })

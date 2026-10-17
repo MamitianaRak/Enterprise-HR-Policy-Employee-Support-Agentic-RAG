@@ -18,6 +18,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("HR_NAMESPACE", "PINECONE_NAMESPACE"),
     )
     cloudops_namespace: str = "cloudops-runbooks"
+    it_namespace: str = "it-support-kb"
     embedding_model: str = "gemini-embedding-2-preview"
     embedding_dimension: int = 768
     gemini_model: str = "gemini-3.5-flash-lite"
