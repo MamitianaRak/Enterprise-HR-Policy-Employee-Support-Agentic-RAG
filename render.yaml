@@ -26,6 +26,16 @@ services:
         sync: false
       - key: ADMIN_API_KEY
         generateValue: true  # random value; read it in the dashboard to upload documents
+      - key: LANGSMITH_API_KEY
+        sync: false
+      # LangSmith tracing of every LangGraph run (picked up automatically by LangChain).
+      # Set LANGSMITH_TRACING to "false" to turn it off without removing the key.
+      - key: LANGSMITH_TRACING
+        value: "true"
+      - key: LANGSMITH_PROJECT
+        value: enterprise-copilot-prod
+      - key: LANGSMITH_ENDPOINT
+        value: https://api.smith.langchain.com  # EU accounts: https://eu.api.smith.langchain.com
       # Configuration
       - key: APP_ENV
         value: production
