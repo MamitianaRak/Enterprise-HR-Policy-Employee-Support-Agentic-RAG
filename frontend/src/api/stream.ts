@@ -1,6 +1,6 @@
 // The agent's progress arrives as Server-Sent Events. EventSource only supports GET and
 // axios does not stream response bodies in the browser, so this uses fetch directly.
-import { ApiError, detailMessage } from './http'
+import { API_BASE_URL, ApiError, detailMessage } from './http'
 import { chatResponseSchema, type ChatResponse } from './schemas'
 
 export type StreamEvent =
@@ -31,7 +31,7 @@ export async function streamChat(
 ): Promise<void> {
   let res: Response
   try {
-    res = await fetch(new URL(`/api/chat/${domain}/stream`, window.location.origin), {
+    res = await fetch(new URL(`${API_BASE_URL}/api/chat/${domain}/stream`, window.location.origin), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
       body: JSON.stringify(body),

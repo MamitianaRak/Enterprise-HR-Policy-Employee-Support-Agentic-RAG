@@ -17,7 +17,14 @@ export function detailMessage(detail: unknown, status: number): string {
   return status ? `Request failed (${status})` : 'Cannot reach the server. Is the backend running?'
 }
 
-export const http = axios.create({ baseURL: '/api' })
+/**
+ * Backend origin, baked in at build time. Empty in development and docker compose, where the
+ * API is served on the same origin (Vite proxy / nginx); set when the frontend is hosted on its
+ * own, e.g. VITE_API_BASE_URL=https://enterprise-copilot-api.onrender.com on Render.
+ */
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '')
+
+export const http = axios.create({ baseURL: `${API_BASE_URL}/api` })
 
 // Every failed request becomes an ApiError with a human-readable message.
 http.interceptors.response.use(

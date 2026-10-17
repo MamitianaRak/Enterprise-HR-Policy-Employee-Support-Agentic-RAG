@@ -1,5 +1,7 @@
 # Enterprise HR Policy & Employee Support Agentic RAG Copilot
 
+[![CI](https://github.com/MamitianaRak/Enterprise-HR-Policy-Employee-Support-Agentic-RAG/actions/workflows/ci.yml/badge.svg)](https://github.com/MamitianaRak/Enterprise-HR-Policy-Employee-Support-Agentic-RAG/actions/workflows/ci.yml)
+
 An end-to-end Forward Deployed Engineer (FDE) project that converts an Agentic RAG workflow into a deployable internal HR product: a **LangGraph + FastAPI** backend (Pinecone, Google Gemini, Tavily) and a **React + TypeScript** frontend that streams the agent's reasoning live, packaged with **Docker**.
 
 ## 1. Business Problem
@@ -309,12 +311,22 @@ Open `http://localhost:5173`. The Vite dev server forwards `/api` to the backend
 
 ```bash
 pip install -r requirements-dev.txt
-pytest                      # backend: fake LLM, retriever and web search, no API keys needed
+pytest --cov=app            # backend: fake LLM, retriever and web search, no API keys needed
 
 cd frontend
 npm test                    # frontend: Vitest + Testing Library, API mocked with MSW
 npm run typecheck
 ```
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every push and pull request:
+
+| Job | Steps |
+|---|---|
+| Backend | `pytest` with coverage (report uploaded as an artifact) |
+| Frontend | `oxlint`, `tsc`, Vitest, production build |
+| Docker | Builds both images (after the two test jobs pass), with layer caching |
 
 ## Docker (deployment)
 
@@ -332,7 +344,26 @@ docker compose up --build
 docker compose run --rm backend python ingest_sample_kb.py --domain hr   # index the sample documents
 ```
 
-SQLite data lives in the `backend-data` volume. Both images honour the `PORT` variable, so they can also run as separate web services on a container host such as Render.
+SQLite data lives in the `backend-data` volume. Both images honour the `PORT` variable, so they can also run as separate web services on a container host.
+
+## Deploying to Render
+
+`render.yaml` is a [Render Blueprint](https://render.com/docs/blueprint-spec) that creates two services:
+
+| Service | Type | Details |
+|---|---|---|
+| `enterprise-copilot-api` | Docker web service (free) | Built from `Dockerfile`, health check `/api/health` |
+| `enterprise-copilot` | Static Site (free) | Render builds `frontend/`; the app calls the backend directly (`VITE_API_BASE_URL`), and the backend only accepts that origin (`CORS_ORIGINS`) |
+
+Steps:
+
+1. Push the repository to GitHub.
+2. In Render: **New → Blueprint**, select the repository. Render reads `render.yaml`.
+3. Enter the secrets when prompted: `GOOGLE_API_KEY`, `PINECONE_API_KEY`, `TAVILY_API_KEY`. `ADMIN_API_KEY` is generated; copy it from the backend's **Environment** tab to upload documents.
+4. After the first deploy, open both services and check their `.onrender.com` URLs. If Render added a suffix because a name was taken, update `VITE_API_BASE_URL` (frontend) and `CORS_ORIGINS` (backend), then redeploy both.
+5. Index the knowledge bases once, from your machine with the same `.env` values (the Pinecone index is shared): `python ingest_sample_kb.py --domain hr` and `--domain cloudops`.
+
+On the free plan the backend sleeps after 15 minutes of inactivity (the first request then takes about a minute), and its SQLite data (conversations, audit) is reset on every restart or deploy. The Pinecone knowledge base is unaffected.
 
 ## API
 

@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     max_retrieval_rewrites: int = 1  # CloudOps: internal query rewrites before going to the web
     max_web_rewrites: int = 1
     admin_api_key: str = "change-me-in-production"
+    # Comma-separated origins allowed to call the API from a browser, e.g. the frontend's URL
+    # when it is hosted separately. Empty = same-origin only (Vite proxy, nginx, docker compose).
+    cors_origins: str = ""
     memory_turns: int = 4
     audit_db_path: str = str(BASE_DIR / "data" / "audit.db")
     memory_db_path: str = str(BASE_DIR / "data" / "memory.db")
