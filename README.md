@@ -1,8 +1,13 @@
-# Enterprise HR Policy & Employee Support Agentic RAG Copilot
+# Enterprise Agentic RAG Copilot
 
-[![CI](https://github.com/MamitianaRak/Enterprise-HR-Policy-Employee-Support-Agentic-RAG/actions/workflows/ci.yml/badge.svg)](https://github.com/MamitianaRak/Enterprise-HR-Policy-Employee-Support-Agentic-RAG/actions/workflows/ci.yml)
+[![CI](https://github.com/MamitianaRak/enterprise-agentic-rag-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/MamitianaRak/enterprise-agentic-rag-copilot/actions/workflows/ci.yml)
 
-An end-to-end Forward Deployed Engineer (FDE) project that converts an Agentic RAG workflow into a deployable internal HR product: a **LangGraph + FastAPI** backend (Pinecone, Google Gemini, Tavily) and a **React + TypeScript** frontend that streams the agent's reasoning live, packaged with **Docker**.
+A multi-domain **Agentic RAG** copilot for the enterprise, with one LangGraph workflow per domain:
+
+- **HR Policy & Employee Support**: answers from the company HR knowledge base, with web fallback clearly labelled for HR validation.
+- **CloudOps Incident Response**: triages incidents (severity, service, category) and answers from private runbooks, SOPs and postmortems first.
+
+An end-to-end Forward Deployed Engineer (FDE) project: a **LangGraph + FastAPI** backend (Pinecone, Google Gemini, Tavily) with self-checked, cited answers and conversation memory, and a **React + TypeScript** frontend that streams the agent's reasoning live. Tested in CI, packaged with **Docker**, deployed on **Render**.
 
 ## 1. Business Problem
 
@@ -180,7 +185,7 @@ The triage badges (severity, service, category) are shown with each answer. The 
 Each business domain has its **own LangGraph workflow** and its **own Pinecone namespace**, built from shared, reusable nodes.
 
 ```text
-Enterprise-HR-Policy-Agentic-RAG-Copilot/
+enterprise-agentic-rag-copilot/
 ├── app/                         Backend (FastAPI, API only)
 │   ├── api/
 │   │   ├── chat.py              POST /api/chat/{domain} and /stream (SSE)
