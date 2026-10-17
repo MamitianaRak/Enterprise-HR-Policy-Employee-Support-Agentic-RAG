@@ -221,7 +221,10 @@ __marimo__/
 
 .vscode/
 
-# Local runtime data
+# Local runtime data (SQLite databases and their -wal/-shm/-journal files, uploads)
 data/*.db
+data/*.db-*
+*.sqlite
+*.sqlite3
 uploads/*
 !uploads/.gitkeep

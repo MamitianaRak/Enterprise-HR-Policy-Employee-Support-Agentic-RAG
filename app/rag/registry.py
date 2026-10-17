@@ -1,10 +1,11 @@
-"""Maps each domain to its own workflow and knowledge base namespace."""
-from dataclasses import dataclass
-from typing import Any
+"""Maps each domain to its own workflow, knowledge base namespace and UI settings."""
+from dataclasses import dataclass, field
+from typing import Any, Iterator
 from app.core.config import get_settings
 from app.rag.common.memory import get_checkpointer, thread_config
 from app.rag.common.state import initial_state
 from app.rag.hr.graph import build_graph as build_hr_graph
+from app.rag.hr.ui import UI as HR_UI
 
 settings = get_settings()
 
@@ -12,13 +13,21 @@ settings = get_settings()
 @dataclass(frozen=True)
 class Domain:
     name: str
-    label: str
     namespace: str
     graph: Any
+    ui: dict = field(default_factory=dict)
+
+    @property
+    def label(self) -> str:
+        return self.ui.get("label", self.name)
+
+    def public(self) -> dict:
+        """What the browser needs to render this domain."""
+        return {"name": self.name, **self.ui}
 
 
 DOMAINS: dict[str, Domain] = {
-    "hr": Domain("hr", "HR Policy", settings.hr_namespace, build_hr_graph(get_checkpointer())),
+    "hr": Domain("hr", settings.hr_namespace, build_hr_graph(get_checkpointer()), HR_UI),
 }
 
 DEFAULT_DOMAIN = "hr"
@@ -29,8 +38,19 @@ def get_domain(name: str) -> Domain:
     return DOMAINS[name]
 
 
+def public_config() -> dict:
+    return {"default": DEFAULT_DOMAIN, "domains": [d.public() for d in DOMAINS.values()]}
+
+
 def ask(domain: Domain, question: str, thread_id: str):
     return domain.graph.invoke(initial_state(question), config=thread_config(domain.name, thread_id))
+
+
+def stream(domain: Domain, question: str, thread_id: str) -> Iterator[dict]:
+    """Yield the full state after each graph step; the last one is the final result."""
+    return domain.graph.stream(
+        initial_state(question), config=thread_config(domain.name, thread_id), stream_mode="values"
+    )
 
 
 def get_history(domain: Domain, thread_id: str) -> list[dict]:

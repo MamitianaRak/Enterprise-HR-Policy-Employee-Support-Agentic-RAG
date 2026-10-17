@@ -1,3 +1,4 @@
+import json
 import pytest
 from fastapi.testclient import TestClient
 from app.api import chat
@@ -31,10 +32,49 @@ def test_health():
     assert client.get("/api/health").json()["status"] == "ok"
 
 
-def test_domains_lists_hr():
+def test_domains_expose_ui_config():
     data = client.get("/api/domains").json()
     assert data["default"] == "hr"
-    assert {"name": "hr", "label": "HR Policy"} in data["domains"]
+    hr = next(d for d in data["domains"] if d["name"] == "hr")
+    assert hr["label"] == "HR Policy"
+    assert hr["examples"] and hr["placeholder"] and hr["accent"].startswith("#")
+
+
+def parse_sse(text):
+    events = []
+    for block in text.strip().split("\n\n"):
+        lines = dict(line.split(": ", 1) for line in block.splitlines())
+        events.append((lines["event"], json.loads(lines["data"])))
+    return events
+
+
+def test_chat_stream_sends_steps_then_result(monkeypatch):
+    states = [
+        {"trace": []},
+        {"trace": ["Memory → new conversation"]},
+        {"trace": ["Memory → new conversation", "Router → KB"]},
+        {**FAKE_RESULT, "trace": ["Memory → new conversation", "Router → KB", "Answer generation → PRIVATE KB"]},
+    ]
+    monkeypatch.setattr(chat, "stream", lambda domain, question, thread_id: iter(states))
+    res = client.post("/api/chat/hr/stream", json={"question": "leave days", "thread_id": "stream-1"})
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("text/event-stream")
+    events = parse_sse(res.text)
+    assert events[0] == ("start", {"thread_id": "stream-1"})
+    assert [e[1]["line"] for e in events if e[0] == "step"] == [
+        "Memory → new conversation", "Router → KB", "Answer generation → PRIVATE KB",
+    ]
+    assert events[-1][0] == "result" and events[-1][1]["answer"] == "20 days."
+
+
+def test_chat_stream_reports_errors_as_events(monkeypatch):
+    def failing(domain, question, thread_id):
+        raise RuntimeError("429 RESOURCE_EXHAUSTED")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(chat, "stream", failing)
+    events = parse_sse(client.post("/api/chat/hr/stream", json={"question": "leave days"}).text)
+    assert events[-1][0] == "error" and events[-1][1]["status"] == 503
 
 
 def test_chat_by_domain(fake_ask):
@@ -100,7 +140,7 @@ def test_ingest_requires_admin_key():
     assert res.status_code == 401
 
 
-def test_home_page_renders():
+def test_root_points_to_docs():
     res = client.get("/")
     assert res.status_code == 200
-    assert "HR Policy" in res.text
+    assert res.json()["docs"] == "/docs"

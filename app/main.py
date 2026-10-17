@@ -1,9 +1,6 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI
 from app.api import chat, health, ingest, sessions
-from app.core.config import get_settings, BASE_DIR
+from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.services.audit import init_db
 from app.services.conversations import init_conversations
@@ -17,22 +14,14 @@ init_conversations()
 init_documents()
 
 
-app = FastAPI(title=settings.app_name, version="1.1.0")
+# API only: the web UI is the React app in frontend/ (Vite in dev, nginx or a static host in prod).
+app = FastAPI(title=settings.app_name, version="2.0.0")
 app.include_router(health.router)
 app.include_router(chat.router)
 app.include_router(ingest.router)
 app.include_router(sessions.router)
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
 
-def asset_version() -> int:
-    """Changes whenever a static file changes, so browsers never keep a stale CSS/JS."""
-    return int(max(p.stat().st_mtime for p in (BASE_DIR / "static").rglob("*") if p.is_file()))
-
-
-@app.get("/", response_class=HTMLResponse)
-def home(request: Request):
-    return templates.TemplateResponse(
-        request, "index.html", {"app_name": settings.app_name, "asset_version": asset_version()}
-    )
+@app.get("/", include_in_schema=False)
+def root():
+    return {"service": settings.app_name, "docs": "/docs", "health": "/api/health"}
