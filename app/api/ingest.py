@@ -1,33 +1,39 @@
 from pathlib import Path
 from fastapi import APIRouter, UploadFile, File, HTTPException, Header
 from app.api.chat import resolve_domain
+from app.api.errors import to_http_error
 from app.core.config import get_settings
 from app.rag.registry import DEFAULT_DOMAIN, Domain
-from app.services.ingestion import SUPPORTED, ingest_files
+from app.services.documents import list_documents
+from app.services.ingestion import SUPPORTED, delete_document, ingest_file
 
-router = APIRouter(prefix="/api", tags=["ingest"])
+router = APIRouter(prefix="/api", tags=["documents"])
 
 settings = get_settings()
 
 
-async def run_ingest(domain: Domain, file: UploadFile, admin_key: str):
+def require_admin(admin_key: str) -> None:
     if admin_key != settings.admin_api_key:
         raise HTTPException(status_code=401, detail="Invalid admin key")
-    suffix = Path(file.filename or "").suffix.lower()
-    if suffix not in SUPPORTED:
+
+
+async def run_ingest(domain: Domain, file: UploadFile, admin_key: str):
+    require_admin(admin_key)
+    filename = Path(file.filename or "").name
+    if Path(filename).suffix.lower() not in SUPPORTED:
         raise HTTPException(status_code=400, detail=f"Supported: {', '.join(sorted(SUPPORTED))}")
     upload_dir = Path(settings.upload_dir) / domain.name
     upload_dir.mkdir(parents=True, exist_ok=True)
-    dest = upload_dir / Path(file.filename).name
+    dest = upload_dir / filename
     dest.write_bytes(await file.read())
-    chunks, ids = ingest_files([dest], domain.name, domain.namespace)
-    return {
-        "message": "Document indexed",
-        "domain": domain.name,
-        "file": dest.name,
-        "chunks": len(chunks),
-        "ids_created": len(ids),
-    }
+    try:
+        chunks = ingest_file(dest, domain.name, domain.namespace)
+    except ValueError as exc:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise to_http_error(exc, "Indexing") from exc
+    return {"message": "Document indexed", "domain": domain.name, "file": filename, "chunks": chunks}
 
 
 @router.post("/ingest/{domain}")
@@ -39,3 +45,24 @@ async def ingest(domain: str, file: UploadFile = File(...), x_admin_key: str = H
 async def ingest_default(file: UploadFile = File(...), x_admin_key: str = Header(default="")):
     """Backward-compatible alias for the default domain."""
     return await run_ingest(resolve_domain(DEFAULT_DOMAIN), file, x_admin_key)
+
+
+@router.get("/documents/{domain}")
+def documents(domain: str):
+    d = resolve_domain(domain)
+    return {"domain": d.name, "documents": list_documents(d.name)}
+
+
+@router.delete("/documents/{domain}/{filename}")
+def remove_document(domain: str, filename: str, x_admin_key: str = Header(default="")):
+    require_admin(x_admin_key)
+    d = resolve_domain(domain)
+    if Path(filename).name != filename:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+    try:
+        delete_document(d.name, filename, d.namespace)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Document not found: {filename}")
+    except Exception as exc:
+        raise to_http_error(exc, "Deleting document") from exc
+    return {"deleted": True, "domain": d.name, "file": filename}

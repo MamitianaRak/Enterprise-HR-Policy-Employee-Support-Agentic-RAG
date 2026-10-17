@@ -1,11 +1,15 @@
+import hashlib
 from pathlib import Path
 from typing import Iterable
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from docx import Document as DocxDocument
-from app.rag.common.vectorstore import add_documents
+from app.core.config import get_settings
+from app.rag.common.vectorstore import add_documents, delete_vectors
+from app.services.documents import get_document, register_document, unregister_document
 
+settings = get_settings()
 
 SUPPORTED = {".pdf", ".txt", ".md", ".docx"}
 
@@ -28,13 +32,39 @@ def chunk_documents(docs: Iterable[Document]) -> list[Document]:
     return splitter.split_documents(list(docs))
 
 
-def ingest_files(paths: Iterable[Path], domain: str, namespace: str):
-    """Load, tag, chunk and index files into the domain's namespace. Returns (chunks, ids)."""
-    docs = []
-    for path in paths:
-        for doc in load_file(path):
-            doc.metadata.update(domain=domain, filename=path.name)
-            docs.append(doc)
-    chunks = chunk_documents(docs)
-    ids = add_documents(chunks, namespace)
-    return chunks, ids
+def chunk_ids(domain: str, filename: str, count: int, start: int = 0) -> list[str]:
+    """Stable vector ids: re-indexing a file overwrites its vectors instead of duplicating them."""
+    key = hashlib.sha1(f"{domain}/{filename}".encode("utf-8")).hexdigest()[:16]
+    return [f"{domain}-{key}-{i}" for i in range(start, count)]
+
+
+def ingest_file(path: Path, domain: str, namespace: str) -> int:
+    """Load, tag, chunk and index one file into the domain's namespace. Returns the chunk count."""
+    docs = load_file(path)
+    for doc in docs:
+        doc.metadata.update(domain=domain, filename=path.name)
+    chunks = [c for c in chunk_documents(docs) if c.page_content.strip()]
+    if not chunks:
+        raise ValueError(f"No text could be extracted from {path.name}")
+
+    add_documents(chunks, namespace, ids=chunk_ids(domain, path.name, len(chunks)))
+    previous = get_document(domain, path.name)
+    if previous and previous["chunks"] > len(chunks):
+        # The new version is shorter: drop the leftover vectors of the old one.
+        delete_vectors(chunk_ids(domain, path.name, previous["chunks"], start=len(chunks)), namespace)
+    register_document(domain, path.name, len(chunks))
+    return len(chunks)
+
+
+def ingest_files(paths: Iterable[Path], domain: str, namespace: str) -> int:
+    return sum(ingest_file(path, domain, namespace) for path in paths)
+
+
+def delete_document(domain: str, filename: str, namespace: str) -> None:
+    """Remove a document's vectors, registry entry and uploaded copy. Raise KeyError if unknown."""
+    doc = get_document(domain, filename)
+    if doc is None:
+        raise KeyError(filename)
+    delete_vectors(chunk_ids(domain, filename, doc["chunks"]), namespace)
+    unregister_document(domain, filename)
+    (Path(settings.upload_dir) / domain / filename).unlink(missing_ok=True)

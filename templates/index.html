@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{{ app_name }}</title>
-  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="stylesheet" href="/static/css/style.css?v={{ asset_version }}" />
 </head>
 <body>
   <div class="shell">
@@ -23,6 +23,10 @@
         <div class="flow-step">5. Rewrite & retry</div>
         <div class="flow-step">6. Grounded answer</div>
       </div>
+      <div class="conversations">
+        <h3>Conversations</h3>
+        <div id="convList" class="conv-list"><div class="empty">No conversation yet.</div></div>
+      </div>
       <button id="openUpload" class="secondary-btn">+ Add HR Document</button>
     </aside>
 
@@ -32,7 +36,10 @@
           <span class="status-dot"></span>
           <span>Employee Knowledge Copilot</span>
         </div>
-        <span class="pill">Agentic RAG</span>
+        <div>
+          <span id="memoryInfo" class="pill">New conversation</span>
+          <button id="newChat" class="secondary-btn" type="button">+ New chat</button>
+        </div>
       </header>
       <section id="chat" class="chat-area">
         <div class="message assistant">
@@ -73,8 +80,10 @@
       <input id="fileInput" type="file" accept=".pdf,.txt,.md,.docx" />
       <button id="uploadBtn" class="send-btn full">Index Document</button>
       <div id="uploadStatus" class="upload-status"></div>
+      <h3 class="doc-heading">Indexed documents</h3>
+      <div id="docList" class="doc-list"><div class="empty">Loading...</div></div>
     </div>
   </div>
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/app.js?v={{ asset_version }}"></script>
 </body>
 </html>

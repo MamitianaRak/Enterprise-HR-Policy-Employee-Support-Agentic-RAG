@@ -15,6 +15,8 @@ def llm():
             model=settings.gemini_model,
             temperature=0,
             google_api_key=settings.google_api_key,
+            timeout=settings.llm_timeout,
+            max_retries=settings.llm_max_retries,
         )
     return _llm
 

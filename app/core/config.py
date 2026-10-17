@@ -20,10 +20,16 @@ class Settings(BaseSettings):
     embedding_model: str = "gemini-embedding-2-preview"
     embedding_dimension: int = 768
     gemini_model: str = "gemini-3.5-flash-lite"
+    llm_timeout: float = 60
+    llm_max_retries: int = 2
+    max_context_chars: int = 12000
     top_k: int = 4
     max_retries: int = 1
+    max_support_retries: int = 1
     admin_api_key: str = "change-me-in-production"
+    memory_turns: int = 4
     audit_db_path: str = str(BASE_DIR / "data" / "audit.db")
+    memory_db_path: str = str(BASE_DIR / "data" / "memory.db")
     upload_dir: str = str(BASE_DIR / "uploads")
     documents_dir: str = str(BASE_DIR / "data" / "documents")
     model_config = SettingsConfigDict(env_file=str(BASE_DIR / ".env"), extra="ignore")

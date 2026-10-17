@@ -79,5 +79,11 @@ def get_retriever(namespace: str):
     return get_vectorstore(namespace).as_retriever(search_kwargs={"k": settings.top_k})
 
 
-def add_documents(chunks, namespace: str):
-    return get_vectorstore(namespace).add_documents(chunks)
+def add_documents(chunks, namespace: str, ids: list[str] | None = None):
+    """Upsert chunks; reusing the same ids replaces the previous vectors."""
+    return get_vectorstore(namespace).add_documents(chunks, ids=ids)
+
+
+def delete_vectors(ids: list[str], namespace: str) -> None:
+    if ids:
+        get_vectorstore(namespace).delete(ids=ids, namespace=namespace)

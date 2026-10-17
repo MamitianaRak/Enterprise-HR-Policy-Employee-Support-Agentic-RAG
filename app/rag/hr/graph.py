@@ -7,8 +7,9 @@ from app.rag.hr import prompts
 settings = get_settings()
 
 
-def build_graph():
+def build_graph(checkpointer=None):
     graph = StateGraph(AgentState)
+    graph.add_node("contextualize", nodes.contextualize_node(prompts.CONTEXTUALIZE))
     graph.add_node("route_question", nodes.router_node(prompts.ROUTER))
     graph.add_node("retrieve_kb", nodes.retrieve_node(settings.hr_namespace))
     graph.add_node("grade_kb", nodes.grade_kb_node(prompts.GRADE_KB))
@@ -17,10 +18,15 @@ def build_graph():
     graph.add_node("rewrite_query", nodes.rewrite_node(prompts.REWRITE))
     graph.add_node("generate_from_kb", nodes.generate_kb_node(prompts.GENERATE_KB))
     graph.add_node("generate_from_web", nodes.generate_web_node(prompts.GENERATE_WEB))
+    graph.add_node("check_support", nodes.check_support_node(prompts.CHECK_SUPPORT))
+    graph.add_node("revise_answer", nodes.revise_node(prompts.REVISE))
+    graph.add_node("check_usefulness", nodes.check_usefulness_node(prompts.CHECK_USEFULNESS))
     graph.add_node("direct_answer", nodes.direct_node(prompts.DIRECT))
     graph.add_node("insufficient", nodes.insufficient_node(prompts.INSUFFICIENT))
+    graph.add_node("commit_memory", nodes.commit_memory)
 
-    graph.add_edge(START, "route_question")
+    graph.add_edge(START, "contextualize")
+    graph.add_edge("contextualize", "route_question")
     graph.add_conditional_edges("route_question", nodes.after_router, {
         "retrieve_kb": "retrieve_kb", "direct_answer": "direct_answer"
     })
@@ -33,8 +39,19 @@ def build_graph():
         "generate_from_web": "generate_from_web", "rewrite_query": "rewrite_query", "insufficient": "insufficient"
     })
     graph.add_edge("rewrite_query", "retrieve_kb")
-    graph.add_edge("generate_from_kb", END)
-    graph.add_edge("generate_from_web", END)
-    graph.add_edge("direct_answer", END)
-    graph.add_edge("insufficient", END)
-    return graph.compile()
+
+    # Every generated answer is checked for grounding, then for usefulness.
+    graph.add_edge("generate_from_kb", "check_support")
+    graph.add_edge("generate_from_web", "check_support")
+    graph.add_conditional_edges("check_support", nodes.after_support, {
+        "check_usefulness": "check_usefulness", "revise_answer": "revise_answer", "insufficient": "insufficient"
+    })
+    graph.add_edge("revise_answer", "check_support")
+    graph.add_conditional_edges("check_usefulness", nodes.after_usefulness, {
+        "commit_memory": "commit_memory", "rewrite_query": "rewrite_query", "insufficient": "insufficient"
+    })
+
+    graph.add_edge("direct_answer", "commit_memory")
+    graph.add_edge("insufficient", "commit_memory")
+    graph.add_edge("commit_memory", END)
+    return graph.compile(checkpointer=checkpointer)

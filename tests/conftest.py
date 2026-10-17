@@ -3,7 +3,9 @@ import tempfile
 from collections import deque
 
 # Must be set before any app module reads the settings.
-os.environ["AUDIT_DB_PATH"] = os.path.join(tempfile.mkdtemp(), "audit_test.db")
+_tmp = tempfile.mkdtemp()
+os.environ["AUDIT_DB_PATH"] = os.path.join(_tmp, "audit_test.db")
+os.environ["MEMORY_DB_PATH"] = os.path.join(_tmp, "memory_test.db")
 os.environ["ADMIN_API_KEY"] = "test-admin-key"
 os.environ["MAX_RETRIES"] = "1"
 
@@ -19,7 +21,10 @@ class FakeStructured:
 
     def invoke(self, prompt):
         self.parent.prompts.append(prompt)
-        return self.schema(**self.parent.structured.popleft())
+        value = self.parent.structured.popleft()
+        if isinstance(value, Exception):
+            raise value
+        return self.schema(**value)
 
 
 class FakeLLM:
@@ -62,6 +67,8 @@ def kb_docs():
                  metadata={"source": r"C:\data\documents\hr\company_hr_handbook.md", "filename": "company_hr_handbook.md"}),
         Document(page_content="Leave requests go through the HR portal.",
                  metadata={"source": "/app/data/documents/hr/company_hr_handbook.md"}),
+        Document(page_content="Sick leave:   10 days per year,\n with a medical certificate after 3 days.",
+                 metadata={"source": "/uploads/hr/policy.pdf", "filename": "policy.pdf", "page": 2}),
     ]
 
 

@@ -1,5 +1,17 @@
 """HR domain prompts. Placeholders are filled with str.format, so literal braces are doubled."""
 
+CONTEXTUALIZE = """
+Rewrite the newest employee message as a standalone HR question, using the previous conversation only when needed.
+Preserve policy names, dates, amounts, locations, and constraints. If the message already stands alone,
+return it unchanged. Do not answer the question.
+
+Previous conversation:
+{history}
+
+Newest message: {question}
+Return valid JSON like {{"query":"How many sick leave days do employees receive?"}}.
+"""
+
 ROUTER = """
 You route messages for an enterprise HR policy and employee support assistant.
 Use kb for questions about company HR policies, leave, holidays, benefits, payroll,
@@ -49,6 +61,49 @@ Question: {question}
 
 Web evidence:
 {evidence}
+"""
+
+CHECK_SUPPORT = """
+You verify answers of an enterprise HR policy assistant. Check whether every meaningful claim in the answer
+(numbers of days, amounts, eligibility rules, deadlines, procedures) is supported by the evidence.
+Return fully_supported only when all important claims are grounded; partially_supported when some claims
+are grounded but some are not; no_support when key claims are unsupported. Evidence excerpts must be short quotes.
+
+Question: {question}
+
+Answer:
+{answer}
+
+Evidence:
+{context}
+
+Return valid JSON like {{"status":"fully_supported","evidence":["Employees receive 20 days..."]}}.
+"""
+
+REVISE = """
+Rewrite the HR answer so every factual claim is directly supported by the evidence below.
+Remove unsupported policy details, numbers, and speculation. Keep any required disclaimer
+(private knowledge base or external information requiring HR validation).
+Still answer the question naturally; do not mention this verification process.
+
+Question: {question}
+
+Current answer:
+{answer}
+
+Evidence:
+{context}
+"""
+
+CHECK_USEFULNESS = """
+Judge only whether the answer directly addresses the employee's question. Do not re-grade factual grounding.
+Question: {question}
+
+Answer:
+{answer}
+
+Return valid JSON like {{"status":"useful","reason":"Gives the number of leave days."}}
+or {{"status":"not_useful","reason":"..."}}.
 """
 
 DIRECT = "Respond briefly and naturally to: {question}"
