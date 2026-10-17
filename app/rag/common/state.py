@@ -27,6 +27,18 @@ class UsefulnessDecision(BaseModel):
     reason: str = ""
 
 
+class RelevantDocuments(BaseModel):
+    relevant: List[int] = Field(default_factory=list, description="1-based numbers of the relevant documents")
+
+
+class Triage(BaseModel):
+    """Routing decision plus a first incident assessment, produced in a single call."""
+    route: Literal["kb", "direct"]
+    severity: Literal["SEV1", "SEV2", "SEV3", "SEV4", "none"] = "none"
+    service: str = ""
+    category: str = ""
+
+
 class MemoryTurn(TypedDict):
     question: str
     answer: str
@@ -54,6 +66,14 @@ class AgentState(TypedDict):
     support_retries: int
     usefulness: str
     use_reason: str
+    # Graded-retrieval workflows (CloudOps): per-document relevance, separate rewrite budgets
+    candidate_docs: List[Document]  # retrieved chunks or web results awaiting relevance grading
+    relevant_docs: List[Document]
+    source_mode: str  # "internal" or "web" while gathering evidence
+    web_query: str
+    retrieval_rewrites: int
+    web_rewrites: int
+    triage: dict | None
     # Accumulates across turns of the same thread (persisted by the checkpointer).
     memory: Annotated[List[MemoryTurn], operator.add]
 
@@ -79,5 +99,12 @@ def initial_state(question: str) -> AgentState:
         "support_retries": 0,
         "usefulness": "",
         "use_reason": "",
+        "candidate_docs": [],
+        "relevant_docs": [],
+        "source_mode": "internal",
+        "web_query": "",
+        "retrieval_rewrites": 0,
+        "web_rewrites": 0,
+        "triage": None,
         "memory": [],
     }

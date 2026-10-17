@@ -19,7 +19,7 @@ export function TraceTimeline({ steps, running }: { steps: string[]; running: bo
               aria-hidden
             />
             <p className="text-sm leading-tight font-medium">{step.title}</p>
-            {step.detail && <p className="mt-0.5 text-xs break-words text-muted-foreground">{step.detail}</p>}
+            {step.detail && <p className="mt-0.5 text-xs wrap-break-word text-muted-foreground">{step.detail}</p>}
           </li>
         )
       })}

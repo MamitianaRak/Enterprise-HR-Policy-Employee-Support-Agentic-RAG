@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { Citations } from './Citations'
 import { Markdown } from './Markdown'
 import { SourceBadges } from './SourceBadges'
+import { TriageBadges } from './TriageBadges'
 
 interface Props {
   message: ChatMessage
@@ -37,7 +38,7 @@ export function MessageItem({ message, webWarning, selected, onShowTrace }: Prop
   if (message.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-[var(--domain)] px-4 py-2.5 text-sm whitespace-pre-wrap text-white shadow-sm">
+        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-(--domain) px-4 py-2.5 text-sm whitespace-pre-wrap text-white shadow-sm">
           {message.content}
         </div>
       </div>
@@ -47,13 +48,13 @@ export function MessageItem({ message, webWarning, selected, onShowTrace }: Prop
   const streaming = message.status === 'streaming'
   return (
     <div className="flex gap-3">
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[var(--domain)]/15 text-[var(--domain)]">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-(--domain)/15 text-(--domain)">
         <Sparkles className="size-4" aria-hidden />
       </div>
       <div
         className={cn(
           'min-w-0 flex-1 space-y-3 rounded-2xl rounded-tl-md border bg-card px-4 py-3 shadow-sm transition-colors',
-          selected && 'ring-2 ring-[var(--domain)]/30',
+          selected && 'ring-2 ring-(--domain)/30',
         )}
       >
         {streaming ? (
@@ -68,6 +69,7 @@ export function MessageItem({ message, webWarning, selected, onShowTrace }: Prop
           </div>
         ) : (
           <>
+            <TriageBadges triage={message.response?.triage} />
             <Markdown>{message.content}</Markdown>
             {message.sourceUsed === 'web_search' && (
               <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">

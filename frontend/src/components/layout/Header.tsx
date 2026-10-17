@@ -17,7 +17,7 @@ export function Header({ domains, current }: { domains: DomainConfig[]; current:
         <Menu />
       </Button>
       <div className="flex items-center gap-2">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-[var(--domain)] text-xs font-bold text-white">EC</div>
+        <div className="flex size-8 items-center justify-center rounded-lg bg-(--domain) text-xs font-bold text-white">EC</div>
         <span className="hidden font-semibold tracking-tight sm:inline">Enterprise Copilot</span>
       </div>
 

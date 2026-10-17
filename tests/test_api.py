@@ -38,6 +38,16 @@ def test_domains_expose_ui_config():
     hr = next(d for d in data["domains"] if d["name"] == "hr")
     assert hr["label"] == "HR Policy"
     assert hr["examples"] and hr["placeholder"] and hr["accent"].startswith("#")
+    cloudops = next(d for d in data["domains"] if d["name"] == "cloudops")
+    assert cloudops["label"] == "CloudOps" and cloudops["examples"]
+
+
+def test_cloudops_chat_returns_triage(monkeypatch):
+    triage = {"severity": "SEV2", "service": "checkout-api", "category": "deployment"}
+    monkeypatch.setattr(chat, "ask", lambda domain, question, thread_id: {**FAKE_RESULT, "triage": triage})
+    res = client.post("/api/chat/cloudops", json={"question": "checkout 502", "thread_id": "inc-1"})
+    assert res.status_code == 200
+    assert res.json()["domain"] == "cloudops" and res.json()["triage"] == triage
 
 
 def parse_sse(text):

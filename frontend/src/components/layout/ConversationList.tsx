@@ -67,7 +67,7 @@ export function ConversationList({ domain, activeId, onNavigate }: Props) {
                 className={cn(
                   'flex items-start gap-2.5 rounded-xl border px-3 py-2.5 pr-9 transition-colors',
                   active
-                    ? 'border-[var(--domain)]/50 bg-[var(--domain)]/10'
+                    ? 'border-(--domain)/50 bg-(--domain)/10'
                     : 'border-transparent hover:border-border hover:bg-muted/60',
                 )}
               >

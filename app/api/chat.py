@@ -39,9 +39,12 @@ def finish_chat(domain: Domain, question: str, thread_id: str, result: dict) -> 
         "source_used": result["source_used"],
         "trace": result.get("trace", []),
         "citations": result.get("citations", []),
-        "rewritten_query": result.get("current_query", question),
+        # The query that produced the evidence: the web query when the answer comes from the web.
+        "rewritten_query": (result.get("source_used") == "web_search" and result.get("web_query"))
+        or result.get("current_query", question),
         "support_status": result.get("support_status", ""),
         "usefulness": result.get("usefulness", ""),
+        "triage": result.get("triage"),  # CloudOps: severity, service, category; None for HR
     }
 
 

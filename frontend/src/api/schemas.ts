@@ -29,6 +29,13 @@ export const citationSchema = z.object({
   excerpt: z.string().optional(),
 })
 
+/** CloudOps incident assessment; null for domains without triage. */
+export const triageSchema = z.object({
+  severity: z.enum(['SEV1', 'SEV2', 'SEV3', 'SEV4', 'none']),
+  service: z.string(),
+  category: z.string(),
+})
+
 export const chatResponseSchema = z.object({
   domain: z.string(),
   thread_id: z.string(),
@@ -40,6 +47,7 @@ export const chatResponseSchema = z.object({
   rewritten_query: z.string(),
   support_status: z.enum(['fully_supported', 'partially_supported', 'no_support', '']),
   usefulness: z.string(),
+  triage: triageSchema.nullish(),
 })
 
 export const memoryTurnSchema = z.object({
@@ -69,6 +77,7 @@ export type SourceUsed = z.infer<typeof sourceUsedSchema>
 export type Citation = z.infer<typeof citationSchema>
 export type ChatResponse = z.infer<typeof chatResponseSchema>
 export type SupportStatus = ChatResponse['support_status']
+export type Triage = z.infer<typeof triageSchema>
 export type MemoryTurn = z.infer<typeof memoryTurnSchema>
 export type Conversation = z.infer<typeof conversationSchema>
 export type IndexedDocument = z.infer<typeof indexedDocumentSchema>

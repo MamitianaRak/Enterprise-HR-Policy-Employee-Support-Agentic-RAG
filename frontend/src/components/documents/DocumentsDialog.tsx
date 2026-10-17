@@ -72,7 +72,7 @@ export function DocumentsDialog({ domain }: { domain: DomainConfig }) {
           onDrop={onDrop}
           className={cn(
             'flex flex-col items-center gap-1 rounded-xl border-2 border-dashed px-4 py-6 text-sm transition-colors',
-            dragging ? 'border-[var(--domain)] bg-[var(--domain)]/5' : 'hover:bg-muted/50',
+            dragging ? 'border-(--domain) bg-(--domain)/5' : 'hover:bg-muted/50',
           )}
         >
           <Upload className="size-5 text-muted-foreground" aria-hidden />

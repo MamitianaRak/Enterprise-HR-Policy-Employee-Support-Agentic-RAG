@@ -7,7 +7,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { createQueryClient } from '@/app/query-client'
 import { routes } from '@/app/routes'
 import { server } from '@/test/setup'
-import { sse } from '@/test/handlers'
+import { CHAT_RESULT, HR_DOMAIN, sse } from '@/test/handlers'
 
 function renderAt(path: string) {
   const router = createMemoryRouter(routes, { initialEntries: [path] })
@@ -52,6 +52,29 @@ describe('ChatPage', () => {
     // Trace steps are shown in the inspector.
     const trace = screen.getAllByRole('list').find((l) => within(l).queryByText('Router'))
     expect(trace).toBeDefined()
+  })
+
+  it('shows the CloudOps tab and the incident triage', async () => {
+    const cloudops = { ...HR_DOMAIN, name: 'cloudops', label: 'CloudOps', title: 'CloudOps Incident Response', accent: '#2563eb' }
+    server.use(
+      http.get('*/api/domains', () => HttpResponse.json({ default: 'hr', domains: [HR_DOMAIN, cloudops] })),
+      http.get('*/api/sessions/cloudops', () => HttpResponse.json({ sessions: [] })),
+      http.post('*/api/chat/cloudops/stream', () =>
+        new HttpResponse(
+          sse([['result', { ...CHAT_RESULT, domain: 'cloudops', triage: { severity: 'SEV2', service: 'checkout-api', category: 'deployment' } }]]),
+          { headers: { 'Content-Type': 'text/event-stream' } },
+        ),
+      ),
+    )
+    const user = userEvent.setup()
+    const router = renderAt('/hr')
+    await user.click(await screen.findByRole('tab', { name: 'CloudOps' }))
+    expect(await screen.findByRole('heading', { name: 'CloudOps Incident Response' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/cloudops')
+
+    await user.type(screen.getByRole('textbox', { name: 'Your question' }), 'checkout 502 after deploy{Enter}')
+    expect((await screen.findAllByText('SEV2')).length).toBeGreaterThan(0)
+    expect(screen.getAllByText('checkout-api').length).toBeGreaterThan(0)
   })
 
   it('shows a readable error when the agent fails', async () => {

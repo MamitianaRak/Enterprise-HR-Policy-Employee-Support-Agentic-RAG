@@ -132,7 +132,7 @@
 /* Model answers rendered by react-markdown */
 @layer components {
   .markdown {
-    @apply text-sm leading-relaxed break-words;
+    @apply text-sm leading-relaxed wrap-break-word;
   }
   .markdown > * + * {
     @apply mt-3;
@@ -148,7 +148,7 @@
   .markdown ul { @apply list-disc space-y-1 pl-5; }
   .markdown ol { @apply list-decimal space-y-1 pl-5; }
   .markdown a {
-    @apply font-medium text-[var(--domain)] underline underline-offset-2;
+    @apply font-medium text-(--domain) underline underline-offset-2;
   }
   .markdown strong { @apply font-semibold; }
   .markdown code {

@@ -2,6 +2,8 @@
 from dataclasses import dataclass, field
 from typing import Any, Iterator
 from app.core.config import get_settings
+from app.rag.cloudops.graph import build_graph as build_cloudops_graph
+from app.rag.cloudops.ui import UI as CLOUDOPS_UI
 from app.rag.common.memory import get_checkpointer, thread_config
 from app.rag.common.state import initial_state
 from app.rag.hr.graph import build_graph as build_hr_graph
@@ -28,6 +30,7 @@ class Domain:
 
 DOMAINS: dict[str, Domain] = {
     "hr": Domain("hr", settings.hr_namespace, build_hr_graph(get_checkpointer()), HR_UI),
+    "cloudops": Domain("cloudops", settings.cloudops_namespace, build_cloudops_graph(get_checkpointer()), CLOUDOPS_UI),
 }
 
 DEFAULT_DOMAIN = "hr"

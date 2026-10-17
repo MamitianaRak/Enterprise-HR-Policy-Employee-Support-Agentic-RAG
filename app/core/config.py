@@ -12,11 +12,12 @@ class Settings(BaseSettings):
     google_api_key: str = ""
     tavily_api_key: str = ""
     pinecone_api_key: str = ""
-    pinecone_index_name: str = "fde-hr-policy-rag"
+    pinecone_index_name: str = "enterprise-copilot"  # one index, one namespace per domain
     hr_namespace: str = Field(
         default="company-hr-kb",
         validation_alias=AliasChoices("HR_NAMESPACE", "PINECONE_NAMESPACE"),
     )
+    cloudops_namespace: str = "cloudops-runbooks"
     embedding_model: str = "gemini-embedding-2-preview"
     embedding_dimension: int = 768
     gemini_model: str = "gemini-3.5-flash-lite"
@@ -26,6 +27,8 @@ class Settings(BaseSettings):
     top_k: int = 4
     max_retries: int = 1
     max_support_retries: int = 1
+    max_retrieval_rewrites: int = 1  # CloudOps: internal query rewrites before going to the web
+    max_web_rewrites: int = 1
     admin_api_key: str = "change-me-in-production"
     memory_turns: int = 4
     audit_db_path: str = str(BASE_DIR / "data" / "audit.db")

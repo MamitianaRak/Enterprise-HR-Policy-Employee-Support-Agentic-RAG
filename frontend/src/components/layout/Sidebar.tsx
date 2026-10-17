@@ -20,7 +20,7 @@ export function Sidebar({ domain, activeThread, onNavigate }: Props) {
           navigate(`/${domain.name}`)
           onNavigate?.()
         }}
-        className="w-full justify-start bg-[var(--domain)] text-white hover:bg-[var(--domain)]/90"
+        className="w-full justify-start bg-(--domain) text-white hover:bg-(--domain)/90"
       >
         <Plus data-icon="inline-start" /> New chat
       </Button>

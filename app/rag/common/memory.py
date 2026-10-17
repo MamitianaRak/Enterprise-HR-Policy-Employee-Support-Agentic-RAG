@@ -17,6 +17,9 @@ def get_checkpointer() -> SqliteSaver:
     return _checkpointer
 
 
+RECURSION_LIMIT = 20  # the longest CloudOps path (rewrites + web + revisions) exceeds LangGraph's default 25
+
+
 def thread_config(domain: str, thread_id: str) -> dict:
     # Prefix with the domain so two workflows never share a conversation.
-    return {"configurable": {"thread_id": f"{domain}:{thread_id}"}}
+    return {"configurable": {"thread_id": f"{domain}:{thread_id}"}, "recursion_limit": RECURSION_LIMIT}

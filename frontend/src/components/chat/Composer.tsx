@@ -32,7 +32,7 @@ export function Composer({ placeholder, disabled, memoryTurns, onSend }: Props) 
 
   return (
     <form onSubmit={submit} className="mx-auto w-full max-w-3xl">
-      <div className="flex items-end gap-2 rounded-2xl border bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-[var(--domain)]/30">
+      <div className="flex items-end gap-2 rounded-2xl border bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-(--domain)/30">
         <Textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -48,7 +48,7 @@ export function Composer({ placeholder, disabled, memoryTurns, onSend }: Props) 
           size="icon-lg"
           disabled={!canSend}
           aria-label="Send"
-          className="rounded-xl bg-[var(--domain)] text-white hover:bg-[var(--domain)]/90"
+          className="rounded-xl bg-(--domain) text-white hover:bg-(--domain)/90"
         >
           <ArrowUp />
         </Button>

@@ -128,6 +128,32 @@ Generate from KB   [4] Tavily Web Search
        └── not useful ──→ [6] Rewrite Query (or Insufficient Evidence)
 ```
 
+### CloudOps workflow (second domain)
+
+The CloudOps incident-response copilot has its own graph, built from the same reusable nodes. It grades every retrieved document, keeps only the relevant ones, and spends separate rewrite budgets on the private knowledge base and on the web:
+
+```text
+Question / follow-up
+   ↓
+[0] Contextualize (keeps the incident context across follow-ups)
+   ↓
+[1] Triage: route (runbooks / direct) + severity SEV1-SEV4, affected service, category, in a single call
+   ├── generic question ───────────────→ Direct Answer
+   └── incident / operations question
+                ↓
+[2] Retrieve private runbooks, SOPs and postmortems
+                ↓
+[3] Relevance grading of all chunks in one call → keep only relevant documents
+       ├── some relevant ──────────→ [6] Generate (only relevant documents are used and cited)
+       ├── none, rewrite budget left → [4] Internal query rewrite → [2]
+       └── none, budget spent ──────→ [5] Web query rewrite → Tavily → [3] (graded the same way)
+                                         (web budget spent → Insufficient Evidence + escalation advice)
+[6] Generate → [7] Support check / revise → [8] Usefulness check
+       └── not useful → rewrite (internal first, then web) or Insufficient Evidence
+```
+
+The triage badges (severity, service, category) are shown with each answer. The sample knowledge base (`data/documents/cloudops/`) contains runbooks for checkout 502 errors and payments high CPU, a rollback SOP, an incident severity and escalation policy, and a postmortem.
+
 ## 5. Technology Stack
 
 | Layer | Technology | Purpose |
@@ -174,6 +200,7 @@ Enterprise-HR-Policy-Agentic-RAG-Copilot/
 │   │   │   ├── graph.py
 │   │   │   ├── prompts.py
 │   │   │   └── ui.py            Labels, examples and colour shown by the frontend
+│   │   ├── cloudops/            CloudOps incident-response workflow (same layout)
 │   │   └── registry.py          domain → workflow + namespace + UI settings
 │   ├── services/                audit, conversations, documents, ingestion (SQLite + Pinecone)
 │   └── main.py
@@ -189,7 +216,7 @@ Enterprise-HR-Policy-Agentic-RAG-Copilot/
 │   └── nginx.conf.template      Static files + /api reverse proxy (SSE-friendly)
 ├── data/documents/
 │   ├── hr/                      Sample HR knowledge base
-│   └── cloudops/                (coming next)
+│   └── cloudops/                Sample runbooks, SOP, severity policy, postmortem
 ├── tests/                       Pytest suite (no network calls)
 ├── Dockerfile                   Backend image
 ├── docker-compose.yml           Backend + frontend
@@ -240,7 +267,7 @@ Copy `.env.example` to `.env` and add your keys.
 GOOGLE_API_KEY=your_google_api_key_here
 TAVILY_API_KEY=your_tavily_api_key_here
 PINECONE_API_KEY=your_pinecone_api_key_here
-PINECONE_INDEX_NAME=fde-hr-policy-rag
+PINECONE_INDEX_NAME=enterprise-copilot
 HR_NAMESPACE=company-hr-kb
 GEMINI_MODEL=gemini-3.5-flash-lite
 EMBEDDING_MODEL=gemini-embedding-2-preview
@@ -251,11 +278,14 @@ APP_ENV=development
 
 `PINECONE_NAMESPACE` is still accepted as an alias for `HR_NAMESPACE`. `EMBEDDING_DIMENSION` must match the existing Pinecone index: on a mismatch the app stops with an error instead of deleting the index.
 
-### Step 4 — Load sample HR knowledge
+### Step 4 — Load the sample knowledge bases
 
 ```bash
 python ingest_sample_kb.py --domain hr
+python ingest_sample_kb.py --domain cloudops
 ```
+
+Each domain is indexed into its own Pinecone namespace (`HR_NAMESPACE`, `CLOUDOPS_NAMESPACE`) in the same index.
 
 ### Step 5 — Run the application (two terminals)
 
@@ -366,6 +396,15 @@ Web Answer
 Ask an ambiguous HR question such as: **What happens if mine is wrong?**
 
 If neither private nor web evidence is sufficient, the workflow can rewrite the query, retry the KB, and eventually stop with insufficient evidence rather than hallucinating.
+
+### CloudOps demos
+
+| Ask | Expected path |
+|---|---|
+| *Our checkout API is returning 502 errors after deployment. What should the on-call engineer check first?* | Triage → SEV2 · checkout-api → runbook + rollback SOP relevant → verified answer with ordered checks |
+| Then: *What should I check next if that does not work?* | Memory rewrites the follow-up with the incident context |
+| *Which incidents count as SEV1 and who must be paged?* | Severity and escalation policy |
+| *What should I verify when a Kubernetes pod keeps restarting with CrashLoopBackOff?* | No runbook → internal rewrite → web search → answer labelled as external guidance |
 
 ## 9. What Changed From the IT Support Reference
 

@@ -9,8 +9,10 @@ from langchain_tavily import TavilySearch
 from pydantic import ValidationError
 from app.core.config import get_settings
 from app.core.llm import llm, text_of
+from langchain_core.documents import Document
 from app.rag.common.state import (
     AgentState, RouteDecision, EvidenceGrade, QueryRewrite, SupportDecision, UsefulnessDecision,
+    RelevantDocuments, Triage,
 )
 from app.rag.common.vectorstore import get_retriever
 
@@ -62,7 +64,13 @@ def truncate(text: str, limit: int | None = None) -> str:
     return text if len(text) <= limit else text[:limit] + "\n[...truncated]"
 
 
+def is_web(doc) -> bool:
+    return doc.metadata.get("source_type") == "web"
+
+
 def source_name(doc) -> str:
+    if is_web(doc):
+        return doc.metadata.get("title") or doc.metadata.get("url", "web result")
     return doc.metadata.get("filename") or Path(doc.metadata.get("source", "unknown")).name
 
 
@@ -80,21 +88,31 @@ def excerpt(text: str, length: int = EXCERPT_LENGTH) -> str:
 def format_docs(docs) -> str:
     blocks = []
     for d in docs:
-        page = page_of(d)
-        head = f"[Source: {source_name(d)}{f' | page {page}' if page else ''}]"
+        if is_web(d):
+            head = f"[Web: {source_name(d)} | {d.metadata.get('url', '')}]"
+        else:
+            page = page_of(d)
+            head = f"[Source: {source_name(d)}{f' | page {page}' if page else ''}]"
         blocks.append(f"{head}\n{d.page_content}")
     return truncate("\n\n".join(blocks))
 
 
-def kb_citations(docs) -> list[dict]:
+def doc_citations(docs) -> list[dict]:
+    """One citation per (document, page) for internal chunks, per URL for web results."""
     citations, seen = [], set()
     for d in docs:
-        key = (source_name(d), page_of(d))
-        if key not in seen:
-            seen.add(key)
-            citations.append({
-                "title": key[0], "page": key[1], "excerpt": excerpt(d.page_content), "url": "", "type": "private_kb",
-            })
+        web = is_web(d)
+        key = ("web", d.metadata.get("url", "")) if web else (source_name(d), page_of(d))
+        if key in seen:
+            continue
+        seen.add(key)
+        citations.append({
+            "title": source_name(d),
+            "page": None if web else key[1],
+            "excerpt": excerpt(d.page_content),
+            "url": d.metadata.get("url", "") if web else "",
+            "type": "web" if web else "private_kb",
+        })
     return citations
 
 
@@ -208,7 +226,7 @@ def generate_kb_node(prompt: str):
         return {
             "answer": answer,
             "source_used": "private_kb",
-            "citations": kb_citations(state["kb_docs"]),
+            "citations": doc_citations(state["kb_docs"]),
             "context": context,
             "support_retries": 0,
             "trace": add_trace(state, "Answer generation → PRIVATE KB"),
@@ -290,6 +308,141 @@ def check_usefulness_node(prompt: str):
             "trace": add_trace(state, f"Usefulness check → {out.status.upper()}{fallback_note(fb)}"),
         }
     return check_usefulness
+
+
+# ---- Graded-retrieval nodes (CloudOps) ----
+# Retrieved chunks and web results are graded one batch at a time; only relevant documents
+# are used for generation and cited. Internal and web queries have separate rewrite budgets.
+
+def triage_node(prompt: str):
+    def triage(state: AgentState):
+        out, fb = structured(Triage, prompt.format(question=state["question"]), Triage(route="kb"))
+        details = " · ".join(x for x in (out.severity if out.severity != "none" else "", out.service) if x)
+        return {
+            "source_used": out.route,
+            "triage": out.model_dump(exclude={"route"}),
+            "trace": add_trace(state, f"Triage → {out.route.upper()}{f' · {details}' if details else ''}{fallback_note(fb)}"),
+        }
+    return triage
+
+
+def retrieve_candidates_node(namespace: str):
+    def retrieve_internal(state: AgentState):
+        docs = get_retriever(namespace).invoke(state["current_query"])
+        return {
+            "candidate_docs": docs,
+            "relevant_docs": [],
+            "source_mode": "internal",
+            "trace": add_trace(state, f"Private KB retrieval → {len(docs)} chunks"),
+        }
+    return retrieve_internal
+
+
+def search_web_docs(state: AgentState):
+    query = state.get("web_query") or state["question"]
+    result = web_search_tool().invoke({"query": query})
+    items = result.get("results", []) if isinstance(result, dict) else []
+    docs = [
+        Document(
+            page_content=item.get("content", ""),
+            metadata={"source_type": "web", "url": item.get("url", ""), "title": item.get("title", "")},
+        )
+        for item in items
+        if item.get("content")
+    ]
+    return {
+        "candidate_docs": docs,
+        "relevant_docs": [],
+        "source_mode": "web",
+        "trace": add_trace(state, f"Web search → {len(docs)} results"),
+    }
+
+
+def grade_documents_node(prompt: str):
+    def grade_documents(state: AgentState):
+        docs = state["candidate_docs"]
+        if not docs:
+            return {"relevant_docs": [], "trace": add_trace(state, f"Relevance grade ({state['source_mode']}) → 0/0 relevant")}
+        listing = "\n\n".join(
+            f"[{i}] {source_name(d)}\n{truncate(d.page_content, 2500)}" for i, d in enumerate(docs, 1)
+        )
+        # Unparseable verdict keeps every document: the support check still guards the answer.
+        out, fb = structured(
+            RelevantDocuments,
+            prompt.format(question=state["question"], documents=listing),
+            RelevantDocuments(relevant=list(range(1, len(docs) + 1))),
+        )
+        relevant = [docs[i - 1] for i in dict.fromkeys(out.relevant) if 1 <= i <= len(docs)]
+        return {
+            "relevant_docs": relevant,
+            "trace": add_trace(
+                state, f"Relevance grade ({state['source_mode']}) → {len(relevant)}/{len(docs)} relevant{fallback_note(fb)}"
+            ),
+        }
+    return grade_documents
+
+
+def rewrite_internal_node(prompt: str):
+    def rewrite_internal(state: AgentState):
+        out, fb = structured(
+            QueryRewrite,
+            prompt.format(question=state["question"], previous=state["current_query"]),
+            QueryRewrite(query=state["question"]),
+        )
+        return {
+            "current_query": out.query,
+            "retrieval_rewrites": state["retrieval_rewrites"] + 1,
+            "trace": add_trace(state, f"Internal query rewrite → {out.query}{fallback_note(fb)}"),
+        }
+    return rewrite_internal
+
+
+def rewrite_web_node(prompt: str):
+    def rewrite_web(state: AgentState):
+        out, fb = structured(
+            QueryRewrite,
+            prompt.format(question=state["question"], previous=state.get("web_query", "")),
+            QueryRewrite(query=state["question"]),
+        )
+        return {
+            "web_query": out.query,
+            "web_rewrites": state["web_rewrites"] + 1,
+            "trace": add_trace(state, f"Web query → {out.query}{fallback_note(fb)}"),
+        }
+    return rewrite_web
+
+
+def generate_evidence_node(prompt: str):
+    def generate_from_evidence(state: AgentState):
+        docs = state["relevant_docs"]
+        context = format_docs(docs)
+        source = "private_kb" if state["source_mode"] == "internal" else "web_search"
+        answer = text_of(llm().invoke(prompt.format(question=state["question"], context=context)))
+        return {
+            "answer": answer,
+            "source_used": source,
+            "citations": doc_citations(docs),
+            "context": context,
+            "support_retries": 0,
+            "trace": add_trace(state, f"Answer generation → {'PRIVATE KB' if source == 'private_kb' else 'WEB SEARCH'}"),
+        }
+    return generate_from_evidence
+
+
+def after_grading(state: AgentState) -> Literal["generate", "rewrite_internal", "rewrite_web", "insufficient"]:
+    if state["relevant_docs"]:
+        return "generate"
+    if state["source_mode"] == "internal":
+        return "rewrite_internal" if state["retrieval_rewrites"] < settings.max_retrieval_rewrites else "rewrite_web"
+    return "rewrite_web" if state["web_rewrites"] < settings.max_web_rewrites else "insufficient"
+
+
+def after_graded_usefulness(state: AgentState) -> Literal["commit_memory", "rewrite_internal", "rewrite_web", "insufficient"]:
+    if state["usefulness"] == "useful":
+        return "commit_memory"
+    if state["source_mode"] == "internal":
+        return "rewrite_internal" if state["retrieval_rewrites"] < settings.max_retrieval_rewrites else "rewrite_web"
+    return "rewrite_web" if state["web_rewrites"] < settings.max_web_rewrites else "insufficient"
 
 
 # ---- Edge conditions ----

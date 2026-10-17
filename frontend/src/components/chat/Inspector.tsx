@@ -1,6 +1,7 @@
 import type { ChatMessage } from '@/hooks/use-chat'
 import { SourceBadges } from './SourceBadges'
 import { TraceTimeline } from './TraceTimeline'
+import { TriageBadges } from './TriageBadges'
 
 /** Right panel: how the agent reached the selected answer. */
 export function Inspector({ message }: { message?: ChatMessage }) {
@@ -21,10 +22,11 @@ export function Inspector({ message }: { message?: ChatMessage }) {
         <section className="space-y-3 rounded-xl border bg-muted/30 p-3 text-sm">
           <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Summary</h3>
           <SourceBadges source={response.source_used} support={response.support_status} />
+          <TriageBadges triage={response.triage} />
           {response.rewritten_query && (
             <div>
               <p className="text-xs text-muted-foreground">Search query used</p>
-              <p className="mt-0.5 break-words">{response.rewritten_query}</p>
+              <p className="mt-0.5 wrap-break-word">{response.rewritten_query}</p>
             </div>
           )}
           <div className="flex justify-between text-xs text-muted-foreground">
