@@ -40,7 +40,7 @@ services:
       - key: APP_ENV
         value: production
       - key: CORS_ORIGINS
-        value: https://enterprise-copilot.onrender.com
+        value: https://enterprise-copilot-l6so.onrender.com  # URL Render assigned to the static site
       - key: PINECONE_INDEX_NAME
         value: enterprise-copilot
       - key: HR_NAMESPACE

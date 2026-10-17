@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/MamitianaRak/enterprise-agentic-rag-copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/MamitianaRak/enterprise-agentic-rag-copilot/actions/workflows/ci.yml)
 
+**Live demo:** https://enterprise-copilot-l6so.onrender.com (free hosting: the first request after a pause can take about a minute while the backend wakes up)
+
 A multi-domain **Agentic RAG** copilot for the enterprise, with one LangGraph workflow per domain:
 
 - **HR Policy & Employee Support**: answers from the company HR knowledge base, with web fallback clearly labelled for HR validation.
