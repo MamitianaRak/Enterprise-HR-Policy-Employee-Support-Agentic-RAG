@@ -22,6 +22,17 @@ describe('parseStep', () => {
     expect(nextStatus('Web query → k8s crashloop')).toBe('Searching the web…')
   })
 
+  it('separates the gateway model from the step text', () => {
+    expect(parseStep('KB evidence grade → GOOD [groq:openai/gpt-oss-20b]')).toEqual({
+      title: 'KB evidence grade', detail: 'GOOD', tone: 'ok', model: 'groq:openai/gpt-oss-20b',
+    })
+    expect(parseStep('Answer generation → PRIVATE KB [gemini:gemini-3.5-flash-lite (cached)]').model).toBe(
+      'gemini:gemini-3.5-flash-lite (cached)',
+    )
+    expect(nextStatus('Router → KB [groq:openai/gpt-oss-20b]')).toBe('Searching the knowledge base…')
+    expect(parseStep('Private KB retrieval → 4 chunks').model).toBeUndefined()
+  })
+
   it('handles fallback markers and unknown steps', () => {
     expect(parseStep('Router → KB (fallback)')).toMatchObject({ detail: 'KB (fallback)', tone: 'info' })
     expect(parseStep('Something new').tone).toBe('muted')

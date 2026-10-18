@@ -9,39 +9,42 @@ os.environ["MEMORY_DB_PATH"] = os.path.join(_tmp, "memory_test.db")
 os.environ["ADMIN_API_KEY"] = "test-admin-key"
 os.environ["MAX_RETRIES"] = "1"
 
+import json
 import pytest
 from langchain_core.documents import Document
+from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage
 from app.rag.common import nodes
 
 
-class FakeStructured:
-    def __init__(self, parent, schema):
-        self.parent, self.schema = parent, schema
+class FakeLane:
+    def __init__(self, parent, json_mode):
+        self.parent, self.json_mode = parent, json_mode
 
     def invoke(self, prompt):
         self.parent.prompts.append(prompt)
+        if not self.json_mode:
+            # Answer lane: list-of-blocks content, as some chat models return.
+            return AIMessage(content=[{"type": "text", "text": self.parent.text}])
         value = self.parent.structured.popleft()
+        if isinstance(value, OutputParserException):
+            return AIMessage(content="Sorry, I cannot answer in JSON.")  # malformed reply
         if isinstance(value, Exception):
-            raise value
-        return self.schema(**value)
+            raise value  # provider failure (quota, timeout...)
+        return AIMessage(content=f"```json\n{json.dumps(value)}\n```")
 
 
 class FakeLLM:
-    """Returns queued structured outputs in order; plain invokes return list-of-blocks content
-    like Gemini chat models do."""
+    """Stands in for the LLM gateway. The fast lane returns the queued JSON objects in order
+    (an OutputParserException item yields a malformed reply, any other exception is raised);
+    the answer lane returns `text`. Prompts of both lanes are recorded in call order."""
 
     def __init__(self, structured=(), text="fake answer"):
         self.structured = deque(structured)
         self.text = text
         self.prompts = []
-
-    def with_structured_output(self, schema, **kwargs):
-        return FakeStructured(self, schema)
-
-    def invoke(self, prompt):
-        self.prompts.append(prompt)
-        return AIMessage(content=[{"type": "text", "text": self.text}])
+        self.fast = FakeLane(self, json_mode=True)
+        self.answer = FakeLane(self, json_mode=False)
 
 
 class FakeRetriever:
@@ -80,7 +83,8 @@ def patch_rag(monkeypatch, kb_docs):
 
     def install(structured, text="fake answer"):
         fake = FakeLLM(structured, text)
-        monkeypatch.setattr(nodes, "llm", lambda: fake)
+        monkeypatch.setattr(nodes, "fast_llm", lambda: fake.fast)
+        monkeypatch.setattr(nodes, "answer_llm", lambda: fake.answer)
         return fake
 
     return install

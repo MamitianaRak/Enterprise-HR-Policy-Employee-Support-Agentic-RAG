@@ -10,7 +10,7 @@ A multi-domain **Agentic RAG** copilot for the enterprise, with one LangGraph wo
 - **IT Support**: assigns a ticket priority (P1-P4), answers from the IT handbook and service desk runbooks first, and never asks for passwords or MFA codes.
 - **CloudOps Incident Response**: triages incidents (severity, service, category) and answers from private runbooks, SOPs and postmortems first.
 
-An end-to-end Forward Deployed Engineer (FDE) project: a **LangGraph + FastAPI** backend (Pinecone, Google Gemini, Tavily) with self-checked, cited answers and conversation memory, and a **React + TypeScript** frontend that streams the agent's reasoning live. Tested in CI, packaged with **Docker**, deployed on **Render**.
+An end-to-end Forward Deployed Engineer (FDE) project: a **LangGraph + FastAPI** backend (LLM gateway over Gemini, Groq, OpenRouter and Cloudflare; Pinecone; Tavily) with self-checked, cited answers and conversation memory, and a **React + TypeScript** frontend that streams the agent's reasoning live. Tested in CI, packaged with **Docker**, deployed on **Render**.
 
 ## 1. Business Problem
 
@@ -87,12 +87,16 @@ LangGraph Agentic RAG Controller  ←→  SQLite (conversation memory, audit)
         ↓
  ┌───────────────┬─────────────────┐
  ↓               ↓
-Private HR KB    Tavily Web Search
+Private KB       Tavily Web Search
 Pinecone         (fallback only)
+(llama-text-embed-v2)
  └───────┬───────┘
          ↓
-Gemini LLM
-Grounded Answer
+LLM gateway (LiteLLM Router)
+  answer lane: Gemini → Groq gpt-oss-120b → Cloudflare → OpenRouter
+  fast lane:   Groq gpt-oss-20b → Cloudflare → Gemini → OpenRouter
+         ↓
+Grounded, cited answer
 ```
 
 ## 4. Agentic RAG Workflow
@@ -175,13 +179,28 @@ Same graded-retrieval graph as CloudOps (shared builder in `app/rag/common/graph
 
 Sample knowledge base (`data/documents/it/`): IT handbook (VPN, passwords, MFA, software, lost laptop), service desk runbook (email, laptop performance, ticket priorities), phishing and security incident reporting, office Wi-Fi and printer troubleshooting.
 
+### LLM gateway
+
+Every LLM call goes through `app/core/llm.py`, a LangChain chat model on top of one **LiteLLM Router**:
+
+| Lane | Used for | Default fallback chain |
+|---|---|---|
+| `answer` | Answers shown to users (Markdown) and their revision | Gemini → Groq `gpt-oss-120b` → Cloudflare `llama-3.3-70b` → OpenRouter |
+| `fast` | Short JSON steps: contextualize, router/triage, relevance and evidence grading, query rewrites, support and usefulness checks | Groq `gpt-oss-20b` → Cloudflare → Gemini → OpenRouter |
+
+- **Fallback and cooldown:** when a provider is rate-limited, out of quota, slow or down, the Router answers with the next provider of the lane and skips the failing one for `LLM_COOLDOWN_SECONDS`. Providers without a key are left out.
+- **Cost and quota:** most calls are short classification steps, so the fast lane keeps them off the answer lane's quota.
+- **Cache:** identical prompts are answered from an in-memory LRU cache (`LLM_CACHE_TTL_SECONDS`), never written to disk.
+- **Observability:** each LLM step of the trace shows the provider and model that actually answered, e.g. `Router → KB [groq:openai/gpt-oss-20b]`, flagged `(cached)` when served from the cache. `GET /api/health` lists both chains (never the keys).
+- **Robust JSON:** the fast lane runs in JSON mode; replies are parsed and validated with Pydantic, and a malformed reply falls back to a safe default instead of failing the request.
+
 ## 5. Technology Stack
 
 | Layer | Technology | Purpose |
 |---|---|---|
 | Agent workflow | LangGraph | Stateful routing and conditional decisions |
-| LLM | Google Gemini (`ChatGoogleGenerativeAI`) | Routing, grading, rewriting, answer generation |
-| Embeddings | Gemini `gemini-embedding-2-preview` | Vector embeddings |
+| LLM gateway | LiteLLM Router over Gemini, Groq, Cloudflare Workers AI, OpenRouter | Two lanes with provider fallback, cooldowns and an in-memory response cache |
+| Embeddings | Pinecone Inference `llama-text-embed-v2` (768d) | Passage/query embeddings, no extra provider key |
 | Vector DB | Pinecone | Private enterprise HR knowledge base |
 | External search | Tavily | Fallback when company HR KB is insufficient |
 | API | FastAPI | REST endpoints + Server-Sent Events streaming |
@@ -209,7 +228,7 @@ enterprise-agentic-rag-copilot/
 │   │   └── errors.py            Provider failures → actionable 503/504 messages
 │   ├── core/
 │   │   ├── config.py            Settings loaded from .env
-│   │   ├── llm.py               Gemini chat model (timeout, retries) + text helper
+│   │   ├── llm.py               LLM gateway: LiteLLM Router, answer/fast lanes, cache
 │   │   └── logging.py
 │   ├── rag/
 │   │   ├── common/              Shared building blocks
@@ -288,17 +307,20 @@ pip install -r requirements.txt
 Copy `.env.example` to `.env` and add your keys.
 
 ```env
-GOOGLE_API_KEY=your_google_api_key_here
-TAVILY_API_KEY=your_tavily_api_key_here
-PINECONE_API_KEY=your_pinecone_api_key_here
+# LLM gateway: at least one provider key (each missing provider is skipped)
+GOOGLE_API_KEY=...
+GROQ_API_KEY=...
+OPENROUTER_API_KEY=...
+# Knowledge base + embeddings (Pinecone Inference) and web fallback
+PINECONE_API_KEY=...
 PINECONE_INDEX_NAME=enterprise-copilot
-HR_NAMESPACE=company-hr-kb
-GEMINI_MODEL=gemini-3.5-flash-lite
-EMBEDDING_MODEL=gemini-embedding-2-preview
+EMBEDDING_MODEL=llama-text-embed-v2
 EMBEDDING_DIMENSION=768
+TAVILY_API_KEY=...
 ADMIN_API_KEY=change-me-in-production
-APP_ENV=development
 ```
+
+See `.env.example` for the lane order, models, cooldown and cache settings.
 
 `PINECONE_NAMESPACE` is still accepted as an alias for `HR_NAMESPACE`. `EMBEDDING_DIMENSION` must match the existing Pinecone index: on a mismatch the app stops with an error instead of deleting the index.
 

@@ -90,6 +90,7 @@ def test_unsupported_answer_is_never_shown(patch_rag):
 def test_useless_answer_triggers_query_rewrite(patch_rag):
     patch_rag(
         [{"route": "kb"}, {"grade": "good"}, FULL, NOT_USEFUL,   # first attempt
+         {"query": "annual leave days policy"},                  # rewrite (fast lane, JSON)
          {"grade": "good"}, FULL, USEFUL],                       # after rewrite
         text="20 days.",
     )
@@ -102,8 +103,8 @@ def test_useless_answer_triggers_query_rewrite(patch_rag):
 
 def test_weak_everywhere_rewrites_once_then_stops(patch_rag):
     patch_rag(
-        [{"route": "kb"}, {"grade": "weak"}, {"grade": "weak"}, {"grade": "weak"}, {"grade": "weak"}],
-        text="rewritten query",
+        [{"route": "kb"}, {"grade": "weak"}, {"grade": "weak"}, {"query": "rewritten query"},
+         {"grade": "weak"}, {"grade": "weak"}],
     )
     result = run("What happens if mine is wrong?")
     assert result["source_used"] == "insufficient_evidence"

@@ -19,7 +19,11 @@ services:
     envVars:
       # Secrets: entered in the Render dashboard on first deploy, never stored in git.
       - key: GOOGLE_API_KEY
-        sync: false
+        sync: false  # LLM gateway: answer lane (Gemini first)
+      - key: GROQ_API_KEY
+        sync: false  # LLM gateway: fast lane (gpt-oss-20b first) + fallback
+      - key: OPENROUTER_API_KEY
+        sync: false  # LLM gateway: last fallback (free models)
       - key: PINECONE_API_KEY
         sync: false
       - key: TAVILY_API_KEY
@@ -49,10 +53,14 @@ services:
         value: cloudops-runbooks
       - key: IT_NAMESPACE
         value: it-support-kb
+      - key: LLM_PROVIDERS
+        value: gemini,groq,cloudflare,openrouter
+      - key: LLM_FAST_PROVIDERS
+        value: groq,cloudflare,gemini,openrouter
       - key: GEMINI_MODEL
         value: gemini-3.5-flash-lite
       - key: EMBEDDING_MODEL
-        value: gemini-embedding-2-preview
+        value: llama-text-embed-v2  # Pinecone Inference
       - key: EMBEDDING_DIMENSION
         value: "768"
 

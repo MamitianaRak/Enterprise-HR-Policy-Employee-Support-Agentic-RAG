@@ -4,12 +4,11 @@ import json
 import logging
 from pathlib import Path
 from typing import Literal
-from langchain_core.exceptions import OutputParserException
+from langchain_core.documents import Document
 from langchain_tavily import TavilySearch
 from pydantic import ValidationError
 from app.core.config import get_settings
-from app.core.llm import llm, text_of
-from langchain_core.documents import Document
+from app.core.llm import answer_llm, fast_llm, pop_model_label, remember_model, text_of
 from app.rag.common.state import (
     AgentState, RouteDecision, EvidenceGrade, QueryRewrite, SupportDecision, UsefulnessDecision,
     RelevantDocuments, Triage,
@@ -42,17 +41,46 @@ def web_search_tool():
 # ---- Helpers ----
 
 def add_trace(state: AgentState, message: str):
-    return [*state.get("trace", []), message]
+    """Append a trace line; LLM steps get the gateway model that served them, e.g. " [groq:gpt-oss-20b]"."""
+    model = pop_model_label()
+    return [*state.get("trace", []), f"{message} [{model}]" if model else message]
+
+
+def parse_json_object(text: str) -> dict:
+    """The JSON object in a model reply, tolerating code fences or text around it."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.strip("`").removeprefix("json").strip()
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        start, end = text.find("{"), text.rfind("}")
+        if start < 0 or end <= start:
+            raise ValueError("no JSON object in the model reply")
+        value = json.loads(text[start:end + 1])
+    if not isinstance(value, dict):
+        raise ValueError("the model reply is not a JSON object")
+    return value
 
 
 def structured(schema, prompt: str, fallback):
-    """Ask for structured output. Returns (result, used_fallback). Falls back only when the
-    model returns malformed JSON; API errors (quota, timeout) still propagate."""
+    """One fast-lane call returning a JSON object validated against `schema`.
+    Returns (result, used_fallback). Falls back only when the reply is malformed;
+    provider errors (all providers rate-limited, timeout) still propagate."""
+    message = fast_llm().invoke(prompt)
+    remember_model(message)
     try:
-        return llm().with_structured_output(schema, method="json_mode").invoke(prompt), False
-    except (OutputParserException, ValidationError, json.JSONDecodeError) as exc:
+        return schema.model_validate(parse_json_object(text_of(message))), False
+    except (ValueError, ValidationError) as exc:  # JSONDecodeError is a ValueError
         logger.warning("Malformed %s output, using fallback %r: %s", schema.__name__, fallback, exc)
         return fallback, True
+
+
+def write(prompt: str) -> str:
+    """One answer-lane call: the Markdown text shown to the user."""
+    message = answer_llm().invoke(prompt)
+    remember_model(message)
+    return text_of(message)
 
 
 def fallback_note(used: bool) -> str:
@@ -210,11 +238,14 @@ def grade_web_node(prompt: str):
 
 def rewrite_node(prompt: str):
     def rewrite_query(state: AgentState):
-        rewritten = text_of(llm().invoke(prompt.format(question=state["question"])))
+        out, fb = structured(
+            QueryRewrite, prompt.format(question=state["question"]), QueryRewrite(query=state["question"])
+        )
+        rewritten = out.query
         return {
             "current_query": rewritten,
             "retry_count": state["retry_count"] + 1,
-            "trace": add_trace(state, f"Query rewrite → {rewritten}"),
+            "trace": add_trace(state, f"Query rewrite → {rewritten}{fallback_note(fb)}"),
         }
     return rewrite_query
 
@@ -222,7 +253,7 @@ def rewrite_node(prompt: str):
 def generate_kb_node(prompt: str):
     def generate_from_kb(state: AgentState):
         context = format_docs(state["kb_docs"])
-        answer = text_of(llm().invoke(prompt.format(question=state["question"], context=context)))
+        answer = write(prompt.format(question=state["question"], context=context))
         return {
             "answer": answer,
             "source_used": "private_kb",
@@ -236,7 +267,7 @@ def generate_kb_node(prompt: str):
 
 def generate_web_node(prompt: str):
     def generate_from_web(state: AgentState):
-        answer = text_of(llm().invoke(prompt.format(question=state["question"], evidence=state["web_results"])))
+        answer = write(prompt.format(question=state["question"], evidence=state["web_results"]))
         return {
             "answer": answer,
             "source_used": "web_search",
@@ -249,7 +280,7 @@ def generate_web_node(prompt: str):
 
 def direct_node(prompt: str):
     def direct_answer(state: AgentState):
-        answer = text_of(llm().invoke(prompt.format(question=state["question"])))
+        answer = write(prompt.format(question=state["question"]))
         return {"answer": answer, "source_used": "direct", "trace": add_trace(state, "Direct response → no retrieval")}
     return direct_answer
 
@@ -285,7 +316,7 @@ def check_support_node(prompt: str):
 
 def revise_node(prompt: str):
     def revise_answer(state: AgentState):
-        answer = text_of(llm().invoke(prompt.format(question=state["question"], answer=state["answer"], context=state["context"])))
+        answer = write(prompt.format(question=state["question"], answer=state["answer"], context=state["context"]))
         return {
             "answer": answer,
             "support_retries": state["support_retries"] + 1,
@@ -417,7 +448,7 @@ def generate_evidence_node(prompt: str):
         docs = state["relevant_docs"]
         context = format_docs(docs)
         source = "private_kb" if state["source_mode"] == "internal" else "web_search"
-        answer = text_of(llm().invoke(prompt.format(question=state["question"], context=context)))
+        answer = write(prompt.format(question=state["question"], context=context))
         return {
             "answer": answer,
             "source_used": source,

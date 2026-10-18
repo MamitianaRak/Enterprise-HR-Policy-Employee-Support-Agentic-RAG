@@ -6,7 +6,12 @@ export interface TraceStep {
   title: string
   detail: string
   tone: StepTone
+  /** LLM steps: "provider:model" that served the call through the gateway, e.g. "groq:openai/gpt-oss-20b". */
+  model?: string
 }
+
+// The backend appends the gateway model to LLM steps: "Router → KB [groq:openai/gpt-oss-20b]".
+const MODEL_SUFFIX = /\s\[([^\]]+)\]$/
 
 const RULES: Array<[RegExp, (detail: string) => StepTone]> = [
   [/^memory/i, () => 'muted'],
@@ -26,10 +31,13 @@ const RULES: Array<[RegExp, (detail: string) => StepTone]> = [
 ]
 
 export function parseStep(line: string): TraceStep {
-  const [title, ...rest] = line.split(' → ')
+  const model = line.match(MODEL_SUFFIX)?.[1]
+  const text = model ? line.replace(MODEL_SUFFIX, '') : line
+  const [title, ...rest] = text.split(' → ')
   const detail = rest.join(' → ')
   const rule = RULES.find(([re]) => re.test(title))
-  return { title, detail, tone: rule ? rule[1](detail) : 'muted' }
+  const step: TraceStep = { title, detail, tone: rule ? rule[1](detail) : 'muted' }
+  return model ? { ...step, model } : step
 }
 
 /** What the agent is doing next, shown in the "thinking" bubble after a step completes. */

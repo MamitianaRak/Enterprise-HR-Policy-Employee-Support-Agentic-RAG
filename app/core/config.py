@@ -7,9 +7,28 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    app_name: str = "Enterprise HR Policy Agentic RAG Copilot"
+    app_name: str = "Enterprise Agentic RAG Copilot"
     app_env: str = "development"
+
+    # LLM gateway (LiteLLM Router). Two lanes, each a fallback chain tried in order, skipping
+    # providers without credentials; a provider that fails is put in cooldown and the next answers.
+    # answer lane: writes the answers. fast lane: contextualize, triage, grading, rewrites, checks.
+    llm_providers: str = "gemini,groq,cloudflare,openrouter"
+    llm_fast_providers: str = "groq,cloudflare,gemini,openrouter"
     google_api_key: str = ""
+    gemini_model: str = "gemini-3.5-flash-lite"
+    groq_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-120b"
+    groq_fast_model: str = "openai/gpt-oss-20b"
+    cloudflare_api_token: str = ""
+    cloudflare_account_id: str = ""
+    cloudflare_llm_model: str = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    openrouter_api_key: str = ""
+    openrouter_model: str = "nvidia/nemotron-3-super-120b-a12b:free"
+    llm_timeout: float = 60
+    llm_cooldown_seconds: float = 60  # how long a failing provider is skipped
+    llm_cache_ttl_seconds: int = 3600  # in-memory cache of identical prompts; 0 disables it
+
     tavily_api_key: str = ""
     pinecone_api_key: str = ""
     pinecone_index_name: str = "enterprise-copilot"  # one index, one namespace per domain
@@ -19,11 +38,9 @@ class Settings(BaseSettings):
     )
     cloudops_namespace: str = "cloudops-runbooks"
     it_namespace: str = "it-support-kb"
-    embedding_model: str = "gemini-embedding-2-preview"
+    # Embeddings: Pinecone Inference (no extra provider key). Must match the index dimension.
+    embedding_model: str = "llama-text-embed-v2"
     embedding_dimension: int = 768
-    gemini_model: str = "gemini-3.5-flash-lite"
-    llm_timeout: float = 60
-    llm_max_retries: int = 2
     max_context_chars: int = 12000
     top_k: int = 4
     max_retries: int = 1

@@ -40,8 +40,9 @@ Return valid JSON like {{"grade":"good"}}.
 
 REWRITE = """
 Rewrite this HR/employee-support question for better private knowledge retrieval and public web search.
-Preserve intent, add useful HR/policy keywords, do not answer, return only the query.
+Preserve intent, add useful HR/policy keywords, do not answer.
 Question: {question}
+Return valid JSON like {{"query":"annual paid leave days entitlement policy"}}.
 """
 
 GENERATE_KB = """

@@ -4,7 +4,10 @@ from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
-BUSY = ("429", "resource_exhausted", "quota", "rate limit", "too many requests")
+BUSY = (
+    "429", "resource_exhausted", "quota", "rate limit", "ratelimit", "too many requests",
+    "no deployments available",  # LiteLLM: every provider of the lane is in cooldown
+)
 SLOW = ("timeout", "timed out", "deadline")
 
 
@@ -16,5 +19,5 @@ def to_http_error(exc: Exception, action: str) -> HTTPException:
     if any(k in text for k in SLOW):
         return HTTPException(504, "The AI service took too long to answer. Please try again.")
     if isinstance(exc, RuntimeError) and "missing" in text:
-        return HTTPException(500, str(exc))  # configuration error, e.g. "GOOGLE_API_KEY is missing"
+        return HTTPException(500, str(exc))  # configuration error, e.g. "PINECONE_API_KEY is missing"
     return HTTPException(500, f"{action} failed. Check the server logs for details.")

@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react'
+import { Cpu, Loader2 } from 'lucide-react'
 import { toneDot } from '@/lib/tones'
 import { parseStep } from '@/lib/trace'
 import { cn } from '@/lib/utils'
@@ -20,6 +20,12 @@ export function TraceTimeline({ steps, running }: { steps: string[]; running: bo
             />
             <p className="text-sm leading-tight font-medium">{step.title}</p>
             {step.detail && <p className="mt-0.5 text-xs wrap-break-word text-muted-foreground">{step.detail}</p>}
+            {step.model && (
+              <p className="mt-1 inline-flex max-w-full items-center gap-1 rounded-md border bg-muted/50 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground" title="Model that served this step (LLM gateway)">
+                <Cpu className="size-3 shrink-0" aria-hidden />
+                <span className="truncate">{step.model}</span>
+              </p>
+            )}
           </li>
         )
       })}
